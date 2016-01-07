@@ -1,0 +1,169 @@
+import numpy as np
+from numpy import zeros, sqrt, pi
+from numpy.linalg import pinv, inv
+from numpy import vectorize
+import time, datetime
+from multiprocessing import Process, Queue
+import matplotlib.pyplot as plt
+from error_analysis_class import *
+
+
+def Cumulative_SNR_loop(RSDPower, l):
+    """ Fisher as a function of k_max (=l) """
+    
+    matricesXi = [RSDPower.covariance00, RSDPower.covariance02, RSDPower.covariance04, np.transpose(RSDPower.covariance02), RSDPower.covariance22, RSDPower.covariance24,np.transpose(RSDPower.covariance04), np.transpose(RSDPower.covariance24), RSDPower.covariance44]
+    
+    matricesPP = [RSDPower.covariance_PP00, RSDPower.covariance_PP02, RSDPower.covariance_PP04,RSDPower.covariance_PP02, RSDPower.covariance_PP22, RSDPower.covariance_PP24,RSDPower.covariance_PP04, RSDPower.covariance_PP24, RSDPower.covariance_PP44]
+    
+    Xizeros = np.zeros((len(RSDPower.kcenter),len(RSDPower.rcenter)))
+    matrices2Xi = [RSDPower.dxip0, Xizeros,Xizeros,Xizeros,RSDPower.dxip2,Xizeros,Xizeros,Xizeros,RSDPower.dxip4]
+    
+
+    #""" F_bandpower from P """
+    part_Fisher_bandpower_PP = inv(CombineCovariance3(l, matricesPP))
+    
+    #""" GET full size C_Xi"""
+    l_r = len(RSDPower.rcenter)
+    C_matrix3 = CombineCovariance3(l_r, matricesXi)
+    
+    Xi, Xi2 = CombineDevXi3(l_r, matrices2Xi)
+    
+    #""" F_bandpower from Xi """
+    Fisher_bandpower_Xi = FisherProjection(Xi, C_matrix3)
+    Cov_bandpower_Xi = inv( Fisher_bandpower_Xi )# , rcond = -1e-28)
+    
+    
+    cut = len(RSDPower.kcenter)
+    
+    part00 = Cov_bandpower_Xi[0:cut, 0:cut]
+    part02 = Cov_bandpower_Xi[0:cut, cut:2*cut]
+    part04 = Cov_bandpower_Xi[0:cut, 2*cut:3*cut+1]
+    part22 = Cov_bandpower_Xi[cut:2*cut, cut:2*cut]
+    part24 = Cov_bandpower_Xi[cut:2*cut, 2*cut:3*cut+1]
+    part44 = Cov_bandpower_Xi[2*cut:3*cut+1, 2*cut:3*cut+1]
+    
+    part_list = [ part00, part02, part04, np.transpose(part02), part22, part24, np.transpose(part04), np.transpose(part24), part44]
+    Cov_bandpower_Xi_combine = CombineCovariance3(l, part_list)
+    part_Fisher_bandpower_Xi = inv(Cov_bandpower_Xi_combine )#, rcond = -1e-28)
+    
+    data_Vec = np.array([RSDPower.multipole_bandpower0[0:l+1], RSDPower.multipole_bandpower2[0:l+1], RSDPower.multipole_bandpower4[0:l+1]]).reshape(1,3 * (l+1))
+    
+    data_Vec0 = RSDPower.multipole_bandpower0[0:l+1]
+    Fisher_bandpower_PP00 = inv(RSDPower.covariance_PP00[0:l+1,0:l+1])
+    
+    SNR_PP = np.dot( np.dot( data_Vec, part_Fisher_bandpower_PP ), np.transpose(data_Vec))
+    SNR_Xi = np.dot( np.dot( data_Vec, part_Fisher_bandpower_Xi ), np.transpose(data_Vec))
+    
+    return RSDPower.kcenter[l], SNR_PP, SNR_Xi
+
+
+
+def SNR_multiprocessing(RSDPower, kcut_max):
+    # cumulative SNR --------------------------------------------------------------------
+    
+    num_process = 4 # for k loop
+    print 'multi_processing for k loop : ', num_process, ' workers'
+    numberlist_k = np.arange(1, kcut_max-1,1)
+    numberlist_k_split = np.array_split(numberlist_k, num_process)
+    
+    vec_Cumulative_SNR_loop = np.vectorize(Cumulative_SNR_loop)
+    
+    def cumulative_SNR_all(q, order, input):
+    
+        kklist, SNR_PP_list, SNR_Xi_list = vec_Cumulative_SNR_loop(RSDPower,input)
+        DAT = np.array(np.concatenate(( kklist, SNR_PP_list, SNR_Xi_list ), axis = 0)).reshape(3,len(input))
+        q.put(( order, DAT ))
+
+    loop_queue = Queue()
+
+    loop_processes = [Process(target=cumulative_SNR_all, args=(loop_queue, z[0], z[1])) for z in zip(range(num_process+1), numberlist_k_split)]
+    
+    for p in loop_processes:
+        p.start()
+
+    loop_result = [loop_queue.get() for p in loop_processes]
+    loop_result.sort()
+    loop_result_list = [ loop[1] for loop in loop_result ]
+    loops = loop_result_list[0]
+    for i in range(1, num_process):
+        loops = np.concatenate((loops, loop_result_list[i]), axis = 1 )
+
+    kklist = loops[0]
+    SNR_PP_list = np.sqrt(loops[1])
+    SNR_Xi_list = np.sqrt(loops[2])
+    
+    print "SNR final 10 values :", SNR_Xi_list[-11:-1]
+    return kklist, SNR_PP_list, SNR_Xi_list
+
+
+
+
+def main():
+
+    # initial setting ------------------------------
+    
+    # integral range (in Fourier transform)
+    KMIN = 0.01
+    KMAX = 200. #502.32
+    # r scale
+    RMIN = .1 #24.
+    RMAX = 200. #152.
+    # k scale
+    kmin = 0.01
+    kmax = 5.
+    # BAO+RSD(r 24 ~ 152) (k: 0.01 ~ 0.2))
+    # BAO only(r 29 ~ 200) (k : 0.02 ~ 0.3)
+    
+    # REID (0.01~ 180) corresponding k value :(0.02 ~ 361.28)
+    # REID convergence condition : kN = 61, rN = 151, subN = 101
+    # REID convergence condition : kN = 101, rN = 101, subN = 121
+    
+    # the number of sample point should be 2^n+1 (b/c romb integration)
+    kN = 2**5 + 1 # k bins. converge perfectly at 151, 2by2 components converge at 121
+    rN = 101  # r bins
+    subN = 2**12 + 1
+    N_x = 2**14 + 1
+    
+    RSDPower = RSD_covariance(KMIN, KMAX, RMIN, RMAX, kN, rN, subN, N_x)
+    RSDPower.compile_fortran_modules() ## run only for the first time running
+    
+    rcut_max = len(RSDPower.rcenter)-1
+    rcut_min = 0
+    kcut_min = get_closest_index_in_data( kmin, RSDPower.kmin )
+    kcut_max = get_closest_index_in_data( kmax, RSDPower.kmax )
+    
+    print "\nkcut_min :", RSDPower.kmin[kcut_min], "  kcut_max :", RSDPower.kmax[kcut_max]
+    print "rcut_max :", RSDPower.rmin[rcut_max], "  rcut_min :", RSDPower.rmax[rcut_min], "\n"
+    
+    
+    # make bandpower and cov matrices-----------------------
+    
+    file = open('matterpower_z_0.55.dat') # from camb (z=0.55)
+    RSDPower.MatterPower(file)
+    RSDPower.Shell_avg_band()
+    
+    """ power spectrum multipoles l = 0,2,4 """
+    RSDPower.multipole_P_band_all()
+    
+    """ derivative dXi/dp """
+    RSDPower.derivative_Xi_band_all()
+
+    """ P covariance matrix ( nine submatrices C_ll' ) """
+    RSDPower.RSDband_covariance_PP_all()
+
+    """ Xi covariance matrix ( nine submatrices C_ll' ) """
+    RSDPower.RSDband_covariance_Xi_all()
+    
+
+    
+    # cumulative SNR and plotting ----------------------------
+
+    kklist, SNR_PP_list, SNR_Xi_list = SNR_multiprocessing(RSDPower, kcut_max)
+    
+    makedirectory('plots')
+    Linear_plot( kklist, ['P','Xi'], SNR_PP_list, SNR_Xi_list, scale = None, title = 'Cumulative SNR \n (rmin : {:>3.3f} rmax : {:>3.3f})'.format(RSDPower.RMIN, RSDPower.RMAX), pdfname = 'plots/cumulative_snr_kN{}_rN{}_rmin{:>3.3f}_rmax{:>3.3f}.pdf'.format(RSDPower.n, RSDPower.n2, RSDPower.RMIN, RSDPower.RMAX), ymin = 0.0, ymax = 800., xmin = 0.0, xmax = 1., ylabel='Cumulative SNR' )
+
+
+
+if __name__=='__main__':
+    main()
