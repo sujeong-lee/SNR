@@ -6,68 +6,105 @@ from scipy.interpolate import interp1d
 from scipy.integrate import simps, romb
 
 class Linear_covariance():
+    """
+    Class Name
+    ----------
+    Linear_covariance
     
-    """ No redshift"""
+    
+    Usage
+    -----
+    from error_analysis_class import RSD_covariance
+    R = RSD_covariance( PARAMETERS ... )
+    
+    
+    Methods
+    -------
+    
+    1. INPUT PARAMETERS
+    
+    KMIN, KMAX : integral range for k in Fourier transform (Analytically from 0 to infinity)
+    RMIN, RMAX : scale range in configuration space.
+    kmin, kmax : scale range in Fourier space
+    n : the number of k bin
+    n2 : the number of r bin
+    subN :
+    N_x : number of k bins, only used for Cov_Xi
+    
+    i.e) for BAO+RSD scale : RMIN=24, RMAX=152, kmin=0.01, kmax=0.2
+    
+    ** kN, subN, N_x should be 2^n+1 because they are used in romb integration module
+    
+    
+    2. INTERNAL PARAMS
+    
+    h :
+    Vs : survey volume
+    nn : number density \bar{n} (in shot noise)
+    
+    rmin, rmax : array of minimum r and maximum r values of each bin
+    rcenter : array of center values of r bins
+    dr : array of r bin size
+    dlnr : logarithmic r bin size
+    
+    kbin 도 비슷
+    
+    skbin : shell averaging을 위한 각각의 빈 속의 sampling points. 비슷.
+    kbin_x : bins used for cov_Xi
+    """
 
     def __init__(self, KMIN, KMAX, RMIN, RMAX, n, n2, subN, N_x):
         
-        #parameter
+        # const
         self.h= 1.0
-        self.Vs= 5.0*10**9 # survey volume
-        self.nn= 3.0 * 10**(-4) # shot noise : \bar{n}
+        self.Vs= 5.0*10**9
+        self.nn= 3.0 * 10**(-4)
         
         # k scale range
         self.KMIN = KMIN
         self.KMAX = KMAX
         
         # r scale
-        self.RMIN = RMIN #30.#0.1 #0.1 for Reid   #1.15 * np.pi / self.kmax
-        self.RMAX = RMAX #180. #180. for Reid  #1.15 * np.pi / self.kmin
+        self.RMIN = RMIN
+        self.RMAX = RMAX
         
-        self.n = n # converge # 201 for Reid # 201 # the number of k bins. the sample should be odd
-        self.n2 = n2 #101 for Reid # number of r bins
+        self.n = n
+        self.n2 = n2
         self.subN = subN
-        #self.klist = np.logspace(np.log(self.KMIN),np.log(self.KMAX),self.n, base = np.e)
         
-        
+        # r bins setting
         self.rlist = np.logspace(np.log(self.RMIN),np.log(self.RMAX),self.n2, base = np.e)
         rlist = self.rlist
         self.rmin = np.delete(rlist,-1)
         self.rmax = np.delete(rlist,0)
-        
-        #self.rcenter = np.array([ (rlist[i] + rlist[i+1])/2. for i in range(len(rlist)-1) ])
         self.rcenter = np.array([ np.sqrt(rlist[i] * rlist[i+1]) for i in range(len(rlist)-1) ])
         self.dr = np.fabs(self.rmax - self.rmin)
-        self.dlnr = np.fabs(np.log(self.rcenter[2]/self.rcenter[3]))# np.log(self.rmax/self.rmin)[3]
+        self.dlnr = np.fabs(np.log(self.rcenter[2]/self.rcenter[3]))
         
-   
-   
+        # sub k bins setting
         self.skbin = np.logspace(np.log10(self.KMIN),np.log10(self.KMAX), subN * self.n + 1, base=10)
         self.skmin = np.delete(self.skbin,-1)
         self.skmax = np.delete(self.skbin,0)
-        #self.skcenter = np.array([(self.skbin[i] + self.skbin[i+1])/2. for i in range(len(self.skbin)-1)])
         self.skcenter = np.array([(np.sqrt(self.skbin[i] * self.skbin[i+1])) for i in range(len(self.skbin)-1)])
-        self.sdlnk = np.log(self.skcenter[3]/self.skcenter[2]) #np.log(self.skmax/self.skmin)
-        
+        self.sdlnk = np.log(self.skcenter[3]/self.skcenter[2])
         self.sdk = self.skmax - self.skmin
-        self.klist = np.array([self.skbin[i*subN] for i in range(len(self.skbin)/subN + 1)]) #For Reid, delete '+1', not relevant anymore
         
-        #self.kcenter = np.array([(self.klist[i] + self.klist[i+1])/2. for i in range(len(self.klist)-1)])
+        # k bins setting
+        self.klist = np.array([self.skbin[i*subN] for i in range(len(self.skbin)/subN + 1)])
         self.kcenter = np.array([self.skcenter[i*subN + subN/2] for i in range(len(self.skcenter)/subN)])
         self.kmin = np.delete(self.klist,-1)
         self.kmax = np.delete(self.klist,0)
         self.dk = self.kmax - self.kmin
-        self.dlnk = np.log(self.kcenter[3]/self.kcenter[2]) #np.log(self.kmax/self.kmin)[3]
+        self.dlnk = np.log(self.kcenter[3]/self.kcenter[2])
 
-
-        # k bin for xi integral ----------
-        self.N_x = N_x #2**18 + 1
-        self.kbin_x = np.logspace(np.log10(self.KMIN),np.log10(self.KMAX), self.N_x + 1, base=10) # for romb int, +2
+        # k bin for xi integral setting
+        self.N_x = N_x
+        self.kbin_x = np.logspace(np.log10(self.KMIN),np.log10(self.KMAX), self.N_x + 1, base=10)
         self.kcenter_x = np.array([(np.sqrt(self.kbin_x[i] * self.kbin_x[i+1])) for i in range(len(self.kbin_x)-1)])
         self.kmin_x = np.delete(self.kbin_x,-1)
         self.kmax_x = np.delete(self.kbin_x,0)
         self.dk_x = self.kmax_x - self.kmin_x
-        self.dlnk_x = np.log(self.kcenter_x[3]/self.kcenter_x[2]) #np.log(self.kmax_x/self.kmin_x)
+        self.dlnk_x = np.log(self.kcenter_x[3]/self.kcenter_x[2])
     
 
         InitiateTitle = '-------------------------------------------------------------------\
@@ -79,6 +116,13 @@ class Linear_covariance():
 
 
     def compile_fortran_modules(self):
+        """
+        Generate python module from fortran subroutines of legendre and sine integral functions
+        
+        * f2py module needed
+        * fortran file: fortranfunction.f90
+        
+        """
         
         import numpy.f2py.f2py2e as f2py2e
         import sys
@@ -86,25 +130,25 @@ class Linear_covariance():
         sys.argv +=  "-c -m fortranfunction fortranfunction.f90".split()
         f2py2e.main()
         sys.argv = [sys.argv[0]]
-        
-        
-        #sys.argv +=  "-c -m sici sici.f90".split()
-        #f2py2e.main()
-        #sys.argv = [sys.argv[0]]
-        #sys.argv +=  "-c -m legen legen.f90".split()
-        #f2py2e.main()
-        #sys.argv = [sys.argv[0]]
-        
+    
 
     def MatterPower(self, file):
+        """
+        Load power spectrum values from input file and generate sampling points
         
-        #Pkl=np.array(np.loadtxt('matterpower_z_0.55.dat')) # z=0.55
+        
+        Parmaeter
+        ---------
+        file: position and power spectrum values from camb
+        
+        """
+        
         Pkl=np.array(np.loadtxt(file))
         k=np.array(Pkl[:,0])
         P=np.array(Pkl[:,1])
         
         #power spectrum interpolation
-        Pm = interp1d(k, P ,kind= "cubic") #matterpower
+        Pm = interp1d(k, P, kind= "cubic")
         #self.Pmlist = Pm(self.kcenter)
         
         #REAL POWERSPECTRUM DATA
@@ -113,9 +157,12 @@ class Linear_covariance():
 
 
     def Shell_avg_band( self ):
-        #
-        #   Shell_avg_band
-        #
+        """
+        Get band power by averaging the sampled points in each bin.
+        Should be called after self.MatterPower()
+        
+        """
+        
         from scipy.integrate import simps
         powerspectrum = self.RealPowerBand
         skbin = self.skbin
@@ -125,8 +172,7 @@ class Linear_covariance():
         kmax = self.kmax
         kmin = self.kmin
         
-        #Vi = 4 * pi * kcenter**2 * dk + 1./3 * pi * (dk)**3
-        Vi = 4./3 * pi * (kmax**3 - kmin**3)
+        Vi = 4./3 * pi * (kmax**3 - kmin**3) # shell volume
         
         resultlist=[]
         for i in range(len(kcenter)):
@@ -143,6 +189,21 @@ class Linear_covariance():
 
 
 class RSD_covariance(Linear_covariance):
+
+    """ 
+    Class for Redshift space distortion
+    Linear_covariance 를 상속한다.
+    
+    
+    PARAMETER
+    ---------
+    b: bias
+    f: 
+    s: peculiar velocity
+    n3: the number of \mu bins (\mu = cos(x))
+    
+    """
+    
 
     def __init__(self, KMIN, KMAX, RMIN, RMAX, n, n2, subN, N_x):
         Linear_covariance.__init__(self, KMIN, KMAX, RMIN, RMAX, n, n2, subN, N_x)
@@ -165,6 +226,15 @@ class RSD_covariance(Linear_covariance):
 
 
     def multipole_P(self,l):
+        """
+        Calculate power spectrum multipoles up to quadrupole
+        
+        Parameters
+        ----------
+        l : mode (0, 2, 4)
+        
+        """
+    
     
         b = self.b
         f = self.f
@@ -184,7 +254,6 @@ class RSD_covariance(Linear_covariance):
         mumatrix = self.mulist[matrix1]
         Le_matrix = Ll(l,mumatrix)
 
-        #Vi = 4 * pi * kcenter**2 * dk + 1./3 * pi * (dk)**3
         Vi = 4./3 * pi * (self.kmax**3 - self.kmin**3)
                 
         resultlist=[]
@@ -210,10 +279,16 @@ class RSD_covariance(Linear_covariance):
         
 
     def derivative_Xi_band(self, l):
-        #
-        #   Shell averaged
-        #   dxi_l / dp_li = i^l int(k^2 ShellavgBessel(kr) / 2pi^2, kmin, kmax)
-        #
+        """
+        Calculate derivatives dXi/dP up to mode l=4
+        dxi_l / dp_li = i^l /int(k^2 ShellavgBessel(kr) / 2pi^2), from kmin to kmax
+        
+        Parameters
+        ----------
+        l: mode 0,2,4
+        
+        """
+
         import numpy as np
         from numpy import pi
         from scipy.integrate import simps, romb
@@ -256,6 +331,12 @@ class RSD_covariance(Linear_covariance):
             
             
     def derivative_Xi_band_all(self):
+        """
+        Do pararrel process for function derivative_Xi_band() and calculate results of all modes(l=0,2,4) at once
+        
+        * parrarel python needed
+        
+        """
     
         import pp, sys, time
         
@@ -268,7 +349,7 @@ class RSD_covariance(Linear_covariance):
         else:
             # Creates jobserver with automatically detected number of workers
             job_server = pp.Server(ppservers=ppservers)
-        #print "Starting pp with", job_server.get_ncpus(), "workers"
+            print "Starting pp with", job_server.get_ncpus(), "workers"
         
         inputs1 = ((0.0,),(2.0,),(4.0,))
         jobs1 = [ job_server.submit(self.derivative_Xi_band, input, (avgBessel,)) for input in inputs1]
@@ -284,8 +365,17 @@ class RSD_covariance(Linear_covariance):
         print "derivative_Xi_band_all (dxi/dp)"
     
 
+
     def RSDband_covariance_PP(self, l1, l2):
+        """
+        Calculate power spectrum covariance matrix 
+        C_{l1,l2} = < P_l1 P_l2 > - < P_l1 >< P_l2 >
         
+        Parameter
+        ---------
+        l1,l2: mode 0,2,4
+        
+        """
         from scipy.integrate import quad,simps
         from numpy import zeros, sqrt, pi, exp
         import cmath
@@ -364,16 +454,17 @@ class RSD_covariance(Linear_covariance):
 
 
     def RSDband_covariance_Xi_all(self):
-    
-        """ Output : submatrices C_ll' for each modes (l,l' = 0,2,4)
-                size of each matrix is (# of r bins) x (# of r bins)
-    
-           C_ll' = <X_l(ri)X_l'(rj)> """
+        """
+        Calculate Xi covariance matrices for all possible cases at once (9 sub matrices)
+        
+        * need multiprocessing module
+        
+        """
 
-        from scipy.integrate import simps, romb
-        from numpy import zeros, sqrt, pi, exp
-        import cmath
-        I = cmath.sqrt(-1)
+        #from scipy.integrate import simps, romb
+        #from numpy import zeros, sqrt, pi, exp
+        #import cmath
+        #I = cmath.sqrt(-1)
     
         klist = self.klist
         kcenter = self.kcenter_x
@@ -432,11 +523,8 @@ class RSD_covariance(Linear_covariance):
         R_processes = [Process(target=Rintegral, args=(R_queue, z[0], z[1])) for z in zip(range(6), inputs)]
         for p in R_processes:
             p.start()
-        #for p in R_processes:
-            #p.join()
+        
         Rintegrals = [R_queue.get() for p in R_processes]
-            #for p in R_processes:
-            #p.terminate()
 
         Rintegrals.sort()
         Rintegrallist = [R[1] for R in Rintegrals]
@@ -560,8 +648,15 @@ class RSD_covariance(Linear_covariance):
 
 def Ll(l,x):
     
-    """ Legendre Polynomial
-        call fortran module in legen.f90 """
+    """ 
+    Calculate Legendre Polynomial function L_l (x)
+    
+    Parameters
+    ----------
+    l: order (0,2,4)
+    x: input number
+    
+    """
     
     import numpy as np
     from numpy import vectorize
@@ -591,8 +686,17 @@ def get_closest_index_in_data( value, data ):
 
 def avgBessel(l,k,rmin,rmax):
     
-    """ Averaged spherical Bessel function in configuration space
-        call fortran module in sici.f90 (sine integral ftn) """
+    """ 
+    Calculate Averaged spherical Bessel function J_l (kr) in configuration space in each bin
+    * fortranfunction module needed
+    
+    Parameters
+    ----------
+    l: order of spherical Bessel function (0,2,4)
+    k: center value in each k bin
+    rmin, rmax: minimum and maximum r values in each r bin
+    
+    """
     
     from numpy import vectorize, pi, cos, sin
     from fortranfunction import sici
@@ -614,6 +718,14 @@ def avgBessel(l,k,rmin,rmax):
 
 
 def symmetrize(cov):
+    """
+    Symmetrize covariance matrix
+    
+    Parameters
+    ----------
+    cov: matrix to be symmetrized
+    
+    """
     
     for i in range(len(cov.diagonal())):
         for j in range(len(cov.diagonal())):
@@ -622,16 +734,22 @@ def symmetrize(cov):
 
 
 def CombineMatrix3by3(cov00, cov01, cov02, cov10, cov11, cov12, cov20, cov21, cov22):
+    """
+    Combine 9 submatrices to a big one
+    
+    """
+    
     C_Matrix = np.array([[cov00,cov01,cov02],\
                         [cov10,cov11,cov12],\
                         [cov20,cov21,cov22]])
     return C_Matrix
 
 def CombineMatrix2by2(cov00, cov01, cov10, cov11):
-        #
-        #   Input should be matrix
-        #   matrices = [00, 02, 22]
-        #
+    """
+    Combine 4 submatrices to a big one
+        
+    """
+
     C_Matrix = np.array([[cov00,cov01],\
                         [cov10,cov11]])
     return C_Matrix
@@ -644,9 +762,17 @@ def CombineMatrix3by2(cov00, cov01, cov10, cov11, cov20, cov21):
     return C_Matrix
 
 def CombineCovariance3(l, matrices):
-
-    """ Input should be a list of matrices :
-        matrices = [00, 02, 04, 22, 24, 44] """
+    """
+    Slice all 9 sub matrices up to maximum k or r, and combine them to a big one
+    Only works for square matrices
+    
+    Parameter 
+    ---------
+    l: slicing index
+    matrices: 9 sub covariance matrices. Input should be a list of matrices 
+            i.e ) matrices = [00, 02, 04, 22, 24, 44]
+        
+    """
 
     cov00 = matrices[0][0:l+1,0:l+1]
     cov02 = matrices[1][0:l+1,0:l+1]
@@ -667,9 +793,17 @@ def CombineCovariance3(l, matrices):
 
 
 def CombineCrossCovariance3(l1, l2, matrices):
-
-    """ Input should be a list of matrices :
-        matrices = [00, 02, 04, 20, 22, 24, 40, 42, 44] """
+    """
+    Slice all 9 sub matrices up to maximum k or r, and combine them to a big one
+    Only works for non-square matrices
+    
+    Parameter
+    ---------
+    l1, l2: slicing index
+    matrices: 9 sub covariance matrices. Input should be a list of matrices
+        i.e) matrices = [00, 02, 04, 20, 22, 24, 40, 42, 44] 
+    
+    """
         
     cov00 = matrices[0][0:l1+1,0:l2+1]
     cov02 = matrices[1][0:l1+1,0:l2+1]
@@ -722,35 +856,19 @@ def CombineCrossCovariance2(l1, l2, matrices):
     return C_Matrix
 
 
-def CombineDevXi(l, matrices):
-    """ Input should be a list of matrices :
-        matrices = [00, 02, 04, 20, 22, 24, 40, 42, 44] """
-
-    dxib0 = matrices[0][0:l+1]
-    dxib2 = matrices[1][0:l+1]
-    dxib4 = matrices[2][0:l+1]
-    dxif0 = matrices[3][0:l+1]
-    dxif2 = matrices[4][0:l+1]
-    dxif4 = matrices[5][0:l+1]
-    dxis0 = matrices[6][0:l+1]
-    dxis2 = matrices[7][0:l+1]
-    dxis4 = matrices[8][0:l+1]
-    
-    Matrix1 = np.concatenate((dxib0, dxib2, dxib4), axis=1)
-    Matrix2 = np.concatenate((dxif0, dxif2, dxif4), axis=1)
-    Matrix3 = np.concatenate((dxis0, dxis2, dxis4), axis=1)
-    Xi = np.vstack((Matrix1, Matrix2, Matrix3))
-
-    Matrix1 = np.concatenate((dxib0, dxib2), axis=1)
-    Matrix2 = np.concatenate((dxif0, dxif2), axis=1)
-    Matrix3 = np.concatenate((dxis0, dxis2), axis=1)
-    Xi2 = np.vstack((Matrix1, Matrix2, Matrix3))
-    
-    return Xi, Xi2
 
 def CombineDevXi3(l, matrices):
-    """ Input should be a list of matrices :
-        matrices = [00, 02, 04, 20, 22, 24, 40, 42, 44] """
+    """
+    Slice all 9 sub matrices up to maximum k or r, and combine them to a big one
+    Only works for derivative matrices
+    
+    Parameter
+    ---------
+    l: slicing index
+    matrices: 9 sub covariance matrices. Input should be a list of matrices
+    i.e) matrices = [00, 02, 04, 20, 22, 24, 40, 42, 44]
+    
+    """
     
     cov00 = matrices[0][:,0:l+1]
     cov02 = matrices[1][:,0:l+1]
@@ -775,10 +893,15 @@ def CombineDevXi3(l, matrices):
 
 
 def FisherProjection( deriv, CovMatrix ):
+    """
+    Calculate Fisher matrix projected to the space of parameter A
     
-    """ Projection for Fisher Matrix """
+    Parameters
+    ----------
+    deriv: derivative matrix  dA/db 
+    CovMatrix : covariance matrix for parameter b
+    """
     inverseC = inv(CovMatrix)
-    #print np.allclose(CovMatrix, np.dot(CovMatrix, np.dot(inverseC, CovMatrix)))
     
     FisherMatrix = np.dot(np.dot(deriv, inverseC), np.transpose(deriv))
     
@@ -789,22 +912,34 @@ def FisherProjection( deriv, CovMatrix ):
     return FisherMatrix
 
 def FisherProjection_Fishergiven( deriv, FisherM ):
+    """
+    Calculate Fisher matrix projected to the space of parameter A
     
-    """ Projection for Fisher Matrix """
+    Parameters
+    ----------
+    deriv: derivative matrix  dA/db
+    FisherM : Fisher matrix for parameter b
+    """
     
     FisherMatrix = np.dot(np.dot(deriv, FisherM), np.transpose(deriv))
     
     for i in range(len(deriv)):
         for j in range(i, len(deriv)):
             FisherMatrix[j,i] = FisherMatrix[i,j]
-    
-    
+
     return FisherMatrix
 
+
 def FractionalError( param1, param2, CovarianceMatrix  ):
+    """
+    Calculate Fractional Error on two parameters.
     
-    """ marginalized cov : fractional error on Parameter  \sigma P / P """
-        
+    Parameter
+    ---------
+    param1, param2: parameters interested in
+    CovarianceMatrix: covariance matrix of two parameters. other parameters should be marginalized
+    
+    """
     error = np.sqrt(CovarianceMatrix.diagonal())
     return error[0]/param1, error[1]/param2
 
@@ -812,21 +947,26 @@ def FractionalError( param1, param2, CovarianceMatrix  ):
 def Local_FractionalError( param1, FisherMatrix  ):
     
     local_error = 1./np.sqrt(np.diagonal(FisherMatrix))/param1
-    """ fractional error on Parameter  \sigma P / P """
 
     return local_error
 
 
 def FractionalErrorBand( params, CovarianceMatrix  ):
+    """
+    Calculate Fractional Error of band power in each k bin, \sigma P(k) / P(k)
     
-    """ fractional error on Parameter  \sigma P / P """
+    Parameter
+    ---------
+    params: array of bandpower P as a function of k
+    CovarianceMatrix: covariance matrix of bandpower
     
+    """
+
     error = np.sqrt(CovarianceMatrix.diagonal())
     return error/params
 
 
 def CrossCoeff( Matrix ):
-    
     """ Cross Corelation matrix   C_ij / Sqrt( C_ii * C_jj) """
     
     matrix1,matrix2 = np.mgrid[0:len(Matrix[0]),0:len(Matrix[0])]
@@ -834,7 +974,17 @@ def CrossCoeff( Matrix ):
     Coeff = Matrix /np.sqrt(diagonal[matrix1] * diagonal[matrix2])
     return Coeff
 
+
+
 def cumulative_SNR( data_Vec, Cov ):
+    """
+    Calculate cumulative signal to noise
+    
+    parameter
+    ---------
+    data_Vec: array of bandpower as a function of k
+    Cov: covariance matrix of bandpower
+    """
 
     cumul_SNR = []
     for i in range(len(data_Vec)):
@@ -862,7 +1012,7 @@ def Linear_plot( base, valuename, *args, **kwargs ):
     ylabel = kwargs.get('ylabel', 'Fractional Error')
     
     #linestyles = ['b-', 'r.', 'g^','c.', 'm--', 'y.', 'k.']
-    linestyles = ['k-', 'r^', 'r^', 'g.','m-', 'g-', 'y--', 'k--','ro','co', 'mo', 'yo', 'ko']
+    linestyles = ['k-', 'r^', 'g.', 'm-', 'g-', 'y--', 'k--','ro','co', 'mo', 'yo', 'ko']
     ziplist = zip(args, valuename, linestyles)
     
     fig = plt.figure()
@@ -891,92 +1041,6 @@ def Linear_plot( base, valuename, *args, **kwargs ):
     #plt.clf()
     print "pdf file saved : ", pdfname
 
-def Linear_plot2( base, base2, value2, valuename, *args,**kwargs):
-    #
-    #
-    #
-    import matplotlib.pyplot as plt
-    from matplotlib.backends.backend_pdf import PdfPages
-    
-    
-    basename = kwargs.get('basename','k')
-    title = kwargs.get('title', 'Fractional Error')
-    pdfname = kwargs.get('pdfname', 'test.pdf')
-    xmin = kwargs.get('xmin',10**(-4))
-    xmax = kwargs.get('xmax', 1000.)
-    ymin = kwargs.get('ymin', 10**(-7))
-    ymax = kwargs.get('ymax', 10**(5))
-    scale = kwargs.get('scale', None )
-    
-    #linestyles = ['b-', 'r.', 'g^','c.', 'm--', 'y.', 'k.']
-    linestyles = ['b--', 'r^', 'g.','c--', 'm--', 'y--', 'k--','ro','co', 'mo', 'yo', 'ko']
-    ziplist = zip(args, valuename, linestyles)
-    
-    fig = plt.figure()
-    fig.suptitle( title , fontsize=10 )
-    
-    if scale == None:
-        for z in ziplist: plt.semilogx( base, z[0], z[2], label = z[1] )
-    elif scale == 'log':
-        for z in ziplist: plt.loglog( base, z[0], z[2], label = z[1] )
-        plt.loglog(base2, value2, 'b-')
-    
-    plt.xlim(xmin, xmax)
-    plt.ylim(ymin, ymax)
-    plt.xlabel( basename )
-    plt.ylabel('Fractional Error')
-    plt.legend(loc=3,prop={'size':10})
-    plt.grid(True)
-    #plt.show()
-    
-    pdf=PdfPages( pdfname )
-    pdf.savefig(fig)
-    pdf.close()
-    #plt.clf()
-    print " pdf file saved : ", pdfname
-
-def Contour_plot( base, crosscoeffdata, **kwargs ):
-    #
-    #   Make 2-D Contour Plot for Covariance Matrix and Fisher Matrix
-    #
-    import numpy as np
-    import matplotlib.cm as cm
-    from matplotlib.backends.backend_pdf import PdfPages
-    import matplotlib.pyplot as plt
-    
-    
-    basename = kwargs.get('basename','log10(k)')
-    title = kwargs.get('title', 'Covariance')
-    pdfname = kwargs.get('pdfname', 'test.pdf')
-    scale = kwargs.get('scale', None )
-    
-    k1 = np.log10(base)
-    k2 = np.log10(base)
-    
-    fig, ax = plt.subplots()
-    ax.set_title( title )
-    ax.set_xlabel( basename )
-    ax.set_ylabel( basename )
-    
-    if scale == None:
-        data = crosscoeffdata
-        label = 'Amplitude'
-    elif scale == 'log':
-        data = np.log10(crosscoeffdata)
-        label = '$\log_{10}$(Amplitude)'
-    elif scale == 'asinh':
-        data = np.arcsinh(1.0 * crosscoeffdata)/1.0
-        label = 'Amplitude'
-    
-    cax = ax.imshow(data, extent=(k1.min(), k1.max(), k2.max(), k2.min()), interpolation='nearest', cmap=cm.gist_rainbow)
-                    
-    cbar = fig.colorbar(cax, ax = ax )
-    cbar.set_label( label )
-                    
-    pdf=PdfPages( pdfname )
-    pdf.savefig(fig)
-    pdf.close()
-    print " pdf file saved : ", pdfname
 
 def makedirectory(dirname):
     import os
