@@ -14,8 +14,8 @@ class Linear_covariance():
     
     Usage
     -----
-    from error_analysis_class import RSD_covariance
-    R = RSD_covariance( PARAMETERS ... )
+    from error_analysis_class import Linear_covariance
+    L = Linear_covariance( PARAMETERS ... )
     
     
     Methods
@@ -28,7 +28,7 @@ class Linear_covariance():
     kmin, kmax : scale range in Fourier space
     n : the number of k bin
     n2 : the number of r bin
-    subN :
+    subN : the number of initial data points at one bandpower bin
     N_x : number of k bins, only used for Cov_Xi
     
     i.e) for BAO+RSD scale : RMIN=24, RMAX=152, kmin=0.01, kmax=0.2
@@ -38,20 +38,24 @@ class Linear_covariance():
     
     2. INTERNAL PARAMS
     
-    h :
+    h : little 'h' (h = Hubbles constant / 100 )
     Vs : survey volume
     nn : number density \bar{n} (in shot noise)
     
+    * prefix r- or suffix -r : spacing in configuration space
+    rbin : initial data spacing
     rmin, rmax : array of minimum r and maximum r values of each bin
     rcenter : array of center values of r bins
     dr : array of r bin size
     dlnr : logarithmic r bin size
     
-    kbin 도 비슷
+    * prefix sk- or suffix -sk : initial data spacing in Fourier space
     
-    skbin : shell averaging을 위한 각각의 빈 속의 sampling points. 비슷.
-    kbin_x : bins used for cov_Xi
+    * prefix k- or suffix -k : Bandpower bin in Fourier space. The initial data values P(sk) are averaged over every subN bins
+    
+    * suffix _x : bins used for all correlation function related calculation ( such as Xi, Cov_Xi...)
     """
+
 
     def __init__(self, KMIN, KMAX, RMIN, RMAX, n, n2, subN, N_x):
         
@@ -73,11 +77,11 @@ class Linear_covariance():
         self.subN = subN
         
         # r bins setting
-        self.rlist = np.logspace(np.log(self.RMIN),np.log(self.RMAX),self.n2, base = np.e)
-        rlist = self.rlist
-        self.rmin = np.delete(rlist,-1)
-        self.rmax = np.delete(rlist,0)
-        self.rcenter = np.array([ np.sqrt(rlist[i] * rlist[i+1]) for i in range(len(rlist)-1) ])
+        self.rbin = np.logspace(np.log(self.RMIN),np.log(self.RMAX),self.n2, base = np.e)
+        rbin = self.rbin
+        self.rmin = np.delete(rbin,-1)
+        self.rmax = np.delete(rbin,0)
+        self.rcenter = np.array([ np.sqrt(rbin[i] * rbin[i+1]) for i in range(len(rbin)-1) ])
         self.dr = np.fabs(self.rmax - self.rmin)
         self.dlnr = np.fabs(np.log(self.rcenter[2]/self.rcenter[3]))
         
@@ -192,14 +196,21 @@ class RSD_covariance(Linear_covariance):
 
     """ 
     Class for Redshift space distortion
-    Linear_covariance 를 상속한다.
+    Use Non-Linear Streaming Model : P(k) = (b + f*mu^2)^2 * matterPower * exp(-k^2 mu^2 s^2)
+    Inherits from Linear_covariance class.
+    
+    
+    Usage
+    -----
+    from error_analysis_class import RSD_covariance
+    L = RSD_covariance( PARAMETERS ... )
     
     
     PARAMETER
     ---------
     b: bias
-    f: 
-    s: peculiar velocity
+    f: the growth rate of structure (=dlnD/dlna)
+    s: velocity dispersion
     n3: the number of \mu bins (\mu = cos(x))
     
     """
@@ -212,9 +223,9 @@ class RSD_covariance(Linear_covariance):
 
         self.b=2.0
         self.f=0.74
-        self.s= 3.5  # sigma in Power spectrum
+        self.s= 3.5
 
-        self.n3 = 2**6 + 1 # 101 for Reid number of mu bins
+        self.n3 = 2**6 + 1
         self.mulist = np.linspace(-1.,1.,self.n3)
         self.dmu = self.mulist[3]-self.mulist[2]
         
@@ -235,7 +246,6 @@ class RSD_covariance(Linear_covariance):
         
         """
     
-    
         b = self.b
         f = self.f
         s = self.s
@@ -247,7 +257,7 @@ class RSD_covariance(Linear_covariance):
         dk = self.dk
         mulist = self.mulist
         dlnk = self.dlnk
-        Pmlist = 1. #self.Shell_avg_band()
+        #Pmlist = 1. #self.Shell_avg_band()
         matterpower = self.RealPowerBand
         
         matrix1, matrix2 = np.mgrid[0:len(mulist),0:self.subN]
@@ -469,7 +479,7 @@ class RSD_covariance(Linear_covariance):
         klist = self.klist
         kcenter = self.kcenter_x
         skcenter = self.kcenter_x
-        rlist = self.rlist
+        rbin = self.rbin
         rcenter = self.rcenter
         dr = self.dr
         rmin = self.rmin
@@ -537,8 +547,8 @@ class RSD_covariance(Linear_covariance):
         Rintegral44 = Rintegrallist[5]
     
         matrix4,matrix5 = np.mgrid[0:len(rcenter),0:len(rcenter)]
-        rlistmatrix1 = rcenter[matrix4] # vertical
-        rlistmatrix2 = rcenter[matrix5] # horizontal
+        rbinmatrix1 = rcenter[matrix4] # vertical
+        rbinmatrix2 = rcenter[matrix5] # horizontal
         dr1 = dr[matrix4] # vertical
         dr2 = dr[matrix5] # horizontal
         rminmatrix = rmin[matrix4] # vertical

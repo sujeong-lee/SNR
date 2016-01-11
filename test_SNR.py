@@ -76,7 +76,7 @@ def SNR_multiprocessing(RSDPower, kcut_max):
     kcut_max: index of kmax
     
     """
-    num_process = 4 
+    num_process = 4
     
     print 'multi_processing for k loop : ', num_process, ' workers'
     numberlist_k = np.arange(1, kcut_max-1,1)
@@ -115,12 +115,74 @@ def SNR_multiprocessing(RSDPower, kcut_max):
 
 
 def main():
+    """
+    This program calculates the cumulative signal to noise of two kinds of bandpower P and P_{xi}.
+    P_{xi} is obtained from correlation function Xi by Fourier transform.
+    
+    
+    * correlation function
+    
+    for monopole,
+    
+    Xi_0 (r) = Integral P_0(k) j0(kr) k^2 dk /(2 \pi^2 )
+    
+    
+    * Cumulative signal to noise
+    
+        k
+        ---
+        \
+        /    Cov P(k)
+        ---
+        k_min
+    
+    
+    * Cov P_{xi}
+    
+           d Xi              d Xi
+        =  ---- [Cov P]^(-1) ----
+           d P               d P
+
+
+
+    USAGE
+    ------
+    
+    Either Linear_covariance or RSD_covariance class should be called first.
+    These classes take the initial setting parameters and define scales and spacings of models.
+    For details, see class file (error_analysis_class.py).
+    
+    KMIN and KMAX represent the beginning and end points of the Fourier integral.
+    Can be set to the smallest and the biggest k values of your data.
+    
+    for test, set
+    RMIN = .01
+    RMAX = 200.
+    kmin = KMIN
+    kmax = KMAX
+    
+    and see if two lines are agreed.
+    
+    for RSD+BAO scale, use 
+    BAO+RSD scale : RMIN=24, RMAX=152, kmin=0.01, kmax=0.2
+    RMIN = 24.
+    RMAX = 152.
+    kmin = 0.01
+    kmax = 0.2
+    
+    for BAO only scale, use
+    RMIN = 29.
+    RMAX = 200.
+    kmin = 0.02
+    kmax = 0.3
+    
+    """
     
     # initial setting ------------------------------
     
     #  (parameter description in class code)
-    KMIN = 0.01
-    KMAX = 200. #502.32
+    KMIN = 0.001
+    KMAX = 502.32
     RMIN = .1
     RMAX = 200.
     kmin = 0.01
@@ -173,7 +235,6 @@ def main():
     
     makedirectory('plots')
     Linear_plot( kklist, ['P','Xi'], SNR_PP_list, SNR_Xi_list, scale = None, title = 'Cumulative SNR \n (rmin : {:>3.3f} rmax : {:>3.3f})'.format(RSDPower.RMIN, RSDPower.RMAX), pdfname = 'plots/cumulative_snr_kN{}_rN{}_rmin{:>3.3f}_rmax{:>3.3f}.pdf'.format(RSDPower.n, RSDPower.n2, RSDPower.RMIN, RSDPower.RMAX), ymin = 0.0, ymax = 800., xmin = 0.0, xmax = 1., ylabel='Cumulative SNR' )
-
 
 
 if __name__=='__main__':
