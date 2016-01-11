@@ -12,6 +12,7 @@ Xi_0 (r) = Integral P_0(k) j0(kr) k^2 dk /(2 \pi^2 )
 
 * Cumulative signal to noise
 
+
      k
     ---
     \
@@ -20,11 +21,14 @@ Xi_0 (r) = Integral P_0(k) j0(kr) k^2 dk /(2 \pi^2 )
     k_min
 
 
+
 * Cov P_{xi}
+
 
     d Xi              d Xi
 =   ---- [Cov P]^(-1) ----
     d P               d P
+
 
 
 
