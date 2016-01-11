@@ -4,6 +4,7 @@ from numpy.linalg import pinv, inv
 from numpy import vectorize
 from scipy.interpolate import interp1d
 from scipy.integrate import simps, romb
+import sys
 
 class Linear_covariance():
     """
@@ -128,12 +129,24 @@ class Linear_covariance():
         
         """
         
-        import numpy.f2py.f2py2e as f2py2e
-        import sys
+        def compile():
+            print 'compiling fortran subroutines'
+            import numpy.f2py.f2py2e as f2py2e
+            import sys
+            sys.argv +=  "-c -m fortranfunction fortranfunction.f90".split()
+            f2py2e.main()
+            sys.argv = [sys.argv[0]]
+    
+        def nocompile(): print 'skip fortran subroutine compiling'
         
-        sys.argv +=  "-c -m fortranfunction fortranfunction.f90".split()
-        f2py2e.main()
-        sys.argv = [sys.argv[0]]
+        switch = {
+            "y" : compile,
+            "n" : nocompile }
+        
+        message = raw_input("first try? [y/n]")
+        
+        switch.get(message, nocompile)()
+
     
 
     def MatterPower(self, file):
@@ -231,8 +244,7 @@ class RSD_covariance(Linear_covariance):
         
         InitiateTitle = '\nclass RSD_covariance \
         \nz = 0.55, kN ={}, subN = {}, rN = {}, N_x = {} \
-        \ndlnr = {}, dlnk={}, sdlnk={} \ndr = ({},{}), \
-        dk = ({},{})'.format(self.n, self.subN, self.n2, self.N_x, self.dlnr ,self.dlnk, self.sdlnk, self.dr[0], self.dr[-1], self.dk[0], self.dk[-1] )
+        \ndlnr = {}, dlnk={}, sdlnk={} \ndr = ({},{}), dk = ({},{})'.format(self.n, self.subN, self.n2, self.N_x, self.dlnr ,self.dlnk, self.sdlnk, self.dr[0], self.dr[-1], self.dk[0], self.dk[-1] )
         print InitiateTitle
 
 
@@ -337,6 +349,9 @@ class RSD_covariance(Linear_covariance):
             resultlist.append(result)
         
         derivative_Xi_bandpower = np.array(resultlist)
+        
+        sys.stdout.write('.')
+        
         return derivative_Xi_bandpower
             
             
@@ -347,33 +362,28 @@ class RSD_covariance(Linear_covariance):
         * parrarel python needed
         
         """
-    
-        import pp, sys, time
         
-        ppservers = ()
-        
-        if len(sys.argv) > 1:
-            ncpus = int(sys.argv[1])
-            # Creates jobserver with ncpus workers
-            job_server = pp.Server(ncpus, ppservers=ppservers)
-        else:
-            # Creates jobserver with automatically detected number of workers
-            job_server = pp.Server(ppservers=ppservers)
-            print "Starting pp with", job_server.get_ncpus(), "workers"
-        
-        inputs1 = ((0.0,),(2.0,),(4.0,))
-        jobs1 = [ job_server.submit(self.derivative_Xi_band, input, (avgBessel,)) for input in inputs1]
-        result1=[]
-        for job in jobs1:
-            re = job()
-            result1.append(re)
+        from multiprocessing import Process, Queue
+        def derivative_Xi_band_process(q, order, (l)):
+            q.put((order, self.derivative_Xi_band(l)))
+            sys.stdout.write('.')
 
+        inputs = ((0.0),(2.0),(4.0))
+        d_queue = Queue()
+        d_processes = [Process(target=derivative_Xi_band_process, args=(d_queue, z[0], z[1])) for z in zip(range(3), inputs)]
+        for p in d_processes:
+            p.start()
+
+        result = [d_queue.get() for p in d_processes]
+    
+        result.sort()
+        result1 = [D[1] for D in result]
+        
         self.dxip0 = result1[0]
         self.dxip2 = result1[1]
         self.dxip4 = result1[2]
-            
-        print "derivative_Xi_band_all (dxi/dp)"
-    
+
+
 
 
     def RSDband_covariance_PP(self, l1, l2):
@@ -446,6 +456,9 @@ class RSD_covariance(Linear_covariance):
         np.fill_diagonal(covariance_mutipole_PP,Total)
 
         #print 'covariance_PP {:>1.0f}{:>1.0f} is finished'.format(l1,l2)
+        
+        sys.stdout.write('.')
+        
         return covariance_mutipole_PP
   
   
@@ -458,7 +471,6 @@ class RSD_covariance(Linear_covariance):
         self.covariance_PP24 = np.array(self.RSDband_covariance_PP(2.0,4.0))
         self.covariance_PP44 = np.array(self.RSDband_covariance_PP(4.0,4.0))
   
-        print 'covariance_PP_all is done'
     
   
 
@@ -489,7 +501,7 @@ class RSD_covariance(Linear_covariance):
         dlnk = self.dlnk_x
         sdlnk = self.dlnk_x
         dr = self.dr
-        Pmlist = self.Pmlist
+        #Pmlist = self.Pmlist
         Pm = self.RealPowerBand_x
         s = self.s
         b = self.b
@@ -524,6 +536,7 @@ class RSD_covariance(Linear_covariance):
             Rintegral3 = romb(R**2 * Le1 * Le2, dx = self.dmu, axis=0 )
             Rintegral2 = romb(R * Le1 * Le2, dx = self.dmu, axis=0 )
             result = const_gamma * skcenter**3 * (Rintegral3 * Pm**2 + Rintegral2 * Pm * 2./self.nn)
+            sys.stdout.write('.')
             
             q.put((order,result))
         
@@ -562,6 +575,7 @@ class RSD_covariance(Linear_covariance):
         
         def AvgBessel_q(q, order, (l, skcenter, rmin, rmax)):
             Avg = [avgBessel(l,k,rmin,rmax) for k in skcenter] #2D (kxr)
+            sys.stdout.write('.')
             q.put((order,Avg))
     
         
@@ -604,7 +618,7 @@ class RSD_covariance(Linear_covariance):
         
             re = FirstTerm+LastTerm
             queue.put((order,re))
-
+            sys.stdout.write('.')
 
         def FirstSecond2(queue, order, (l1, l2, result, avgBessel1, avgBessel2)):
     
@@ -626,7 +640,7 @@ class RSD_covariance(Linear_covariance):
             
             re = FirstTerm+LastTerm
             queue.put((order,re))
-
+            sys.stdout.write('.')
         
         F_inputs = (( 0.0, 0.0, Rintegral00, avgBesselmatrix0, avgBesselmatrix0),( 0.0, 2.0, Rintegral02,  avgBesselmatrix0, avgBesselmatrix2),(0.0, 4.0, Rintegral04, avgBesselmatrix0, avgBesselmatrix4 ),(2.0, 2.0, Rintegral22, avgBesselmatrix2, avgBesselmatrix2 ),(2.0, 4.0, Rintegral24, avgBesselmatrix2, avgBesselmatrix4 ),(4.0, 4.0, Rintegral44, avgBesselmatrix4, avgBesselmatrix4))
         
@@ -648,7 +662,6 @@ class RSD_covariance(Linear_covariance):
         self.covariance24 = np.vstack((Total[4], Total[10]))
         self.covariance44 = np.vstack((Total[5], Total[11]))
 
-        print 'RSD_shell_covariance_AllModes is finished'
         return self.covariance00, self.covariance02, self.covariance04, self.covariance22, self.covariance24, self.covariance44
 
 

@@ -78,7 +78,7 @@ def SNR_multiprocessing(RSDPower, kcut_max):
     """
     num_process = 4
     
-    print 'multi_processing for k loop : ', num_process, ' workers'
+    #print 'multi_processing for k loop : ', num_process, ' workers'
     numberlist_k = np.arange(1, kcut_max-1,1)
     numberlist_k_split = np.array_split(numberlist_k, num_process)
     
@@ -89,6 +89,7 @@ def SNR_multiprocessing(RSDPower, kcut_max):
         kklist, SNR_PP_list, SNR_Xi_list = vec_Cumulative_SNR_loop(RSDPower,input)
         DAT = np.array(np.concatenate(( kklist, SNR_PP_list, SNR_Xi_list ), axis = 0)).reshape(3,len(input))
         q.put(( order, DAT ))
+        sys.stdout.write('.')
 
     loop_queue = Queue()
 
@@ -108,7 +109,8 @@ def SNR_multiprocessing(RSDPower, kcut_max):
     SNR_PP_list = np.sqrt(loops[1])
     SNR_Xi_list = np.sqrt(loops[2])
     
-    print "SNR final 10 values :", SNR_Xi_list[-11:-1]
+    #print "done \nSNR final 10 values :", SNR_Xi_list[-11:-1]
+    print 'done'
     return kklist, SNR_PP_list, SNR_Xi_list
 
 
@@ -148,15 +150,19 @@ def main():
     USAGE
     ------
     
+    Need multiprocessing module, f2py module.
+    * multiprocessing: https://docs.python.org/2/library/multiprocessing.html
+    * f2py: http://docs.scipy.org/doc/numpy-dev/f2py/
+    
     Either Linear_covariance or RSD_covariance class should be called first.
     These classes take the initial setting parameters and define scales and spacings of models.
-    For details, see class file (error_analysis_class.py).
+    For details, see Class code (error_analysis_class.py).
     
     KMIN and KMAX represent the beginning and end points of the Fourier integral.
     Can be set to the smallest and the biggest k values of your data.
     
     for test, set
-    RMIN = .01
+    RMIN = .1
     RMAX = 200.
     kmin = KMIN
     kmax = KMAX
@@ -176,22 +182,34 @@ def main():
     kmin = 0.02
     kmax = 0.3
     
+    MatterPower() load data from the input file.
+    multipole_P_band_all() generate bandpowers. For the Linear case, use Shell_avg_band() instead.
+    
+    The next three functions create covariance matrices and derivatives for Fisher matrix calculation.
+    derivative_Xi_band_all()
+    RSDband_covariance_PP_all()
+    RSDband_covariance_Xi_all()
+    
+    SNR_multiprocessing() does parallel calculation to run the function Cumulative_SNR_loop, that calculates the cumulative signal to noise at each k bin.
+    
+    Detailed descriptions are included in the class code.
+    
     """
     
     # initial setting ------------------------------
     
     #  (parameter description in class code)
-    KMIN = 0.001
-    KMAX = 502.32
+    KMIN = 0.01
+    KMAX = 200 #502.32
     RMIN = .1
     RMAX = 200.
-    kmin = 0.01
-    kmax = 5.
+    kmin = KMIN
+    kmax = KMAX
     
     # the number of k sample point should be 2^n+1 (b/c romb integration)
-    kN = 2**5 + 1
-    rN = 101
-    subN = 2**12 + 1
+    kN = 2**6 + 1
+    rN = 201
+    subN = 2**11 + 1
     N_x = 2**14 + 1
     
     # RSD class
@@ -213,8 +231,9 @@ def main():
     
     file = open('matterpower_z_0.55.dat') # from camb (z=0.55)
     RSDPower.MatterPower(file)
-    RSDPower.Shell_avg_band()
+    #RSDPower.Shell_avg_band()
     
+    print 'Starting multiprocessing (about 60 sec for test code)'
     # power spectrum multipoles l = 0,2,4 """
     RSDPower.multipole_P_band_all()
     
@@ -234,6 +253,7 @@ def main():
     kklist, SNR_PP_list, SNR_Xi_list = SNR_multiprocessing(RSDPower, kcut_max)
     
     makedirectory('plots')
+    # make plot
     Linear_plot( kklist, ['P','Xi'], SNR_PP_list, SNR_Xi_list, scale = None, title = 'Cumulative SNR \n (rmin : {:>3.3f} rmax : {:>3.3f})'.format(RSDPower.RMIN, RSDPower.RMAX), pdfname = 'plots/cumulative_snr_kN{}_rN{}_rmin{:>3.3f}_rmax{:>3.3f}.pdf'.format(RSDPower.n, RSDPower.n2, RSDPower.RMIN, RSDPower.RMAX), ymin = 0.0, ymax = 800., xmin = 0.0, xmax = 1., ylabel='Cumulative SNR' )
 
 
