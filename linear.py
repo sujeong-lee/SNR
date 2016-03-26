@@ -154,7 +154,6 @@ class Linear_covariance():
             # k bin for xi integral setting
             self.N_x = N_x
             self.kbin_x, self.dk_x = np.linspace(self.KMIN, self.KMAX, self.N_x, retstep = True)
-            #self.kbin_x, self.dk_x = np.linspace(self.KMIN, self.KMAX, self.N_x, retstep = True)
             self.kmin_x = np.delete(self.kbin_x,-1)
             self.kmax_x = np.delete(self.kbin_x,0)
             self.kcenter_x = self.kmin_x + self.dk_x/2.
@@ -218,13 +217,12 @@ class Linear_covariance():
         P=np.array(Pkl[:,1])
 
         #power spectrum interpolation
-        Pm = interp1d(k, P, kind= "linear")
+        Pm = interp1d(k, P, kind= "cubic")
         #self.Pmlist = Pm(self.kcenter)
-        self.RealPowerBand = Pm(self.skcenter)
-        self.RealPowerBand_x = Pm(self.kcenter_x)
+        
         #REAL POWERSPECTRUM DATA
-        #self.RealPowerBand = np.array([Pm(sk) for sk in self.skcenter])
-        #self.RealPowerBand_x = np.array([Pm(k) for k in self.kcenter_x])
+        self.RealPowerBand = np.array([Pm(sk) for sk in self.skcenter])
+        self.RealPowerBand_x = np.array([Pm(k) for k in self.kcenter_x])
     
 
 
@@ -381,9 +379,10 @@ class RSD_covariance(Linear_covariance):
         rmin = self.rmin
         rmax = self.rmax
         dr = self.dr
+        skinterval = self.skmax - self.skmin
         
         matrix1, matrix2 = np.mgrid[ 0:len(kcenter), 0: len(rcenter) ]
-        matrix3, matrix4 = np.mgrid[ 0: self.subN, 0:len(rcenter)]
+        matrix3, matrix4 = np.mgrid[0: self.subN, 0:len(rcenter)]
         rminmatrix = rmin[matrix4]
         rmaxmatrix = rmax[matrix4]
         rmatrix = rcenter[matrix4]
@@ -403,6 +402,7 @@ class RSD_covariance(Linear_covariance):
         derivative_Xi_band = np.array(resultlist)
         
         sys.stdout.write('.')
+        
         return derivative_Xi_band
             
             
@@ -486,10 +486,10 @@ class RSD_covariance(Linear_covariance):
             kmatrix = k[matrix2]
             Dmatrix = np.exp(- kmatrix**2 * mumatrix**2 * self.s**2) #FOG matrix
             R = (self.b + self.f * mumatrix**2)**2 * Dmatrix
-            Rintegral3 =  simps(  R**2 * Le_matrix1 * Le_matrix2, dx = dmu, axis=0 )
-            Rintegral2 =  simps(  R * Le_matrix1 * Le_matrix2, dx = dmu, axis=0 )
-            result1 = simps( 4 * pi * k**2 * Pm**2 * Rintegral3, k ) #dx = self.sdk)
-            result2 = simps( 4 * pi * k**2 * Pm * Rintegral2, k ) #dx = self.sdk)
+            Rintegral3 =  romb(  R**2 * Le_matrix1 * Le_matrix2, dx = dmu, axis=0 )
+            Rintegral2 =  romb(  R * Le_matrix1 * Le_matrix2, dx = dmu, axis=0 )
+            result1 = romb( 4 * pi * k**2* Pm**2 * Rintegral3, dx = self.sdk)
+            result2 = romb( 4 * pi * k**2 * Pm * Rintegral2, dx = self.sdk)
             resultlist1.append(result1)
             resultlist2.append(result2)
         
