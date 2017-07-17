@@ -1,0 +1,12 @@
+name : test_bfsn
+k : [0.01, 0.25, 700]  #[kmin, kmax, kN]
+r : [0.1, 180, 200]  #[rmin, rmax, rN]
+logscale : False
+parameter_ind : [0,1,2,3]
+
+######## output ##########
+SNR : 0
+Reid : 1
+#
+#
+#"""
