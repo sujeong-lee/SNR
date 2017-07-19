@@ -1,8 +1,8 @@
-name : default_kN1000_ke-10
-k : [0.0000000001, 0.25, 1000]  #[kmin, kmax, kN]
-r : [20, 160,141]  #[rmin, rmax, rN]
+name : default_kN700
+k : [0.0000000001, 0.25, 700]  #[kmin, kmax, kN]
+r : [20, 160, 71]  #[rmin, rmax, rN]
 logscale : False
-parameter_ind : [0,1]
+parameter_ind : [0,1, 2]
 
 
 # precalculated filename

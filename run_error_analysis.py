@@ -222,10 +222,12 @@ def params_xi_datavector(params, RSDPower):
     ### end ####################################################################        
 
     
-def masking(RSDPower, data, kmin = 0, kmax = 2):
+def masking(RSDPower, data, kmin = 0, kmax = 2, lmax = 4, xi=False):
     
     kcut_min = get_closest_index_in_data( kmin, RSDPower.kmin_y )   
     kcut_max = get_closest_index_in_data( kmax, RSDPower.kmax_y )
+    
+    if xi is True : kcut_min, kcut_max = 0, RSDPower.rcenter.size
     
     Nx, Ny = data.shape
     
@@ -235,60 +237,77 @@ def masking(RSDPower, data, kmin = 0, kmax = 2):
         mask0_x[:,kcut_min:kcut_max+1] = 1
         mask0_y[kcut_min:kcut_max+1,:] = 1
         mask0 = mask0_x*mask0_y
-        
+
         mask1 = np.hstack([mask0, mask0, mask0])
         mask = np.vstack([mask1, mask1, mask1])
-        cov = data * mask
-        #return cov
     
-        """
-        if Nx == Ny : 
-            cov = np.zeros(data.shape)        
-            for i in range(Nx):
-                for j in range(Ny):
-                    #if i != j : 
-                    cov[i][j] = data[i][j]*maskv[i]*maskv[j]
-                #cov[i][i] = data[i][i]
-                #if dia : cov[i][i] = data[i][i]*maskv[i]*maskv[j]
-            return cov
+    elif Nx != Ny :    
+        mask0 = np.zeros((RSDPower.kcenter_y.size, Ny/3))
+        mask0[kcut_min:kcut_max+1, :] = 1
+        mask1 = np.hstack((mask0, mask0, mask0))
+        mask = np.vstack([mask1, mask1, mask1])
+              
+    if lmax == 0:
+        mask2= np.zeros((Nx, Ny))
+        mask2[:Nx/3,:Ny/3] = 1
+        mask = mask * mask2
 
-        """    
-        return cov
-    
-    else :    
+    elif lmax == 2:
+        mask4= np.zeros((Nx, Ny))
+        mask4[:2*Nx/3,:2*Ny/3] = 1
+        mask = mask * mask4
+        
+        """
         mask1 = np.zeros((RSDPower.kcenter_y.size, Ny))
         mask1[kcut_min:kcut_max+1, :] = 1
-        mask = np.vstack([mask1, mask1, mask1])
-        return data * mask
+        mask = np.vstacsk([mask1, mask1, mask1])
+        """        
+        
+    return data * mask
       
         
-def masking_datav(RSDPower, data, kmin = 0, kmax = 2):
+def masking_datav(RSDPower, data, kmin = 0, kmax = 2, lmax = 4, xi=False):
     
     kcut_min = get_closest_index_in_data( kmin, RSDPower.kmin_y )   
     kcut_max = get_closest_index_in_data( kmax, RSDPower.kmax_y )
-    
+    if xi : 
+        kcut_min, kcut_max = 0, RSDPower.rcenter.size
+        
     Nx, Ny = data.shape
   
-    mask1 = np.zeros((Nx, RSDPower.kcenter_y.size))
+    mask1 = np.zeros((Nx, Ny/3))
     mask1[:,kcut_min:kcut_max+1] = 1
     mask = np.hstack([mask1, mask1, mask1])
+    
+    
+    if lmax == 0:
+        mask2= np.zeros((Nx, Ny))
+        mask2[:Nx/3,:Ny/3] = 1
+        mask = mask * mask2
+
+    elif lmax == 2:
+        mask4= np.zeros((Nx, Ny))
+        mask4[:2*Nx/3,:2*Ny/3] = 1
+        mask = mask * mask4
+        
     return data * mask
     
 
     
-def BandpowerFisher(params, RSDPower, kmin = 0, kmax = 2):
+def BandpowerFisher(params, RSDPower, kmin = 0, kmax = 2, lmax=4):
     
     ## calling stored cov and datavector
     covPP = np.genfromtxt(params['covPP_filename'])
-    covXi = np.genfromtxt(params['covXi_filename'])
-    covPXi = masking(RSDPower, np.genfromtxt(params['covPXi_filename']), kmin = kmin, kmax = kmax)
+    covPP_masked = masking(RSDPower, covPP, kmin = kmin, kmax = kmax, lmax=lmax)
+    covXi = masking(RSDPower, np.genfromtxt(params['covXi_filename']), xi=True, lmax=lmax)
+    covPXi = masking(RSDPower, np.genfromtxt(params['covPXi_filename']), kmin = kmin, kmax = kmax, lmax=lmax)
     
-    covPP_masked = masking(RSDPower, covPP, kmin = kmin, kmax = kmax)
+    
     C_tot = np.concatenate((np.concatenate((covPP_masked, covPXi), axis=1),
-            np.concatenate((covPXi.T, covXi), axis=1)), axis = 0)
+                            np.concatenate((covPXi.T, covXi), axis=1)), axis = 0)
 
-    datav_P = masking_datav(RSDPower, np.genfromtxt(params['derivative_P_filename']), kmin = kmin, kmax = kmax)
-    datav_Xi = np.genfromtxt(params['derivative_Xi_filename'])
+    datav_P = masking_datav(RSDPower, np.genfromtxt(params['derivative_P_filename']), kmin = kmin, kmax = kmax, lmax=lmax)
+    datav_Xi = masking_datav(RSDPower, np.genfromtxt(params['derivative_Xi_filename']), xi=True, lmax=lmax)
     datav = np.concatenate((datav_P,datav_Xi), axis=1)
     
     # inverting matrices
@@ -301,7 +320,8 @@ def BandpowerFisher(params, RSDPower, kmin = 0, kmax = 2):
         covPPlist = [covPP[:cut, :cut], covPP[:cut, cut:2*cut], covPP[:cut, 2*cut:],
                     covPP[:cut, cut:2*cut], covPP[cut:2*cut, cut:2*cut], covPP[cut:2*cut, 2*cut:], 
                     covPP[:cut, 2*cut:], covPP[cut:2*cut, 2*cut:], covPP[2*cut:, 2*cut:]]
-        FisherP = DiagonalBlockwiseInversion3x3(*tuple(covPPlist))
+        FisherP = masking(RSDPower, DiagonalBlockwiseInversion3x3(*tuple(covPPlist)), kmin=kmin, kmax=kmax, lmax=lmax)
+                             
         #FisherBand_P = FisherProjection_Fishergiven(datav_P, FisherP)
         #FisherBand_P = np.dot(np.dot(datav_P, FisherP), datav_P.T)
         f = 'data_txt/cov/'+params['name']+'_bandpower_PP.fisher'
@@ -313,8 +333,8 @@ def BandpowerFisher(params, RSDPower, kmin = 0, kmax = 2):
     if 'fisher_bandpower_Xi_filename' not in params:
         FisherXi = pinv(covXi)
         #print '\nFisherXi', np.sum(covXi.diagonal() <= 0.0)
-        #FisherBand_Xi = FisherProjection_Fishergiven(datav_Xi, FisherXi)
-        FisherBand_Xi = np.dot(np.dot(datav_Xi, FisherXi), datav_Xi.T)
+        FisherBand_Xi = FisherProjection_Fishergiven(datav_Xi, FisherXi)
+        #FisherBand_Xi = np.dot(np.dot(datav_Xi, FisherXi), datav_Xi.T)
         f2 = 'data_txt/cov/'+params['name']+'_bandpower_Xi.fisher'
         np.savetxt(f2, FisherBand_Xi)
         params['fisher_bandpower_Xi_filename']= f2   
@@ -332,7 +352,7 @@ def BandpowerFisher(params, RSDPower, kmin = 0, kmax = 2):
         b = covPXi
         c = covPXi.T 
         d = covXi
-        ia = masking(RSDPower, FisherP, kmin=kmin, kmax=kmax)
+        ia = FisherP
         
         import time
         t1 = time.time()
@@ -343,8 +363,8 @@ def BandpowerFisher(params, RSDPower, kmin = 0, kmax = 2):
         
         print time.time()-t1
         Fisher3_tot = np.vstack(( np.hstack(( Fa, Fb )), np.hstack(( Fc, Fd )) ))
-        """
         
+        """
         Fisher3_tot = pinv(C_tot)
         """
         rcondnum = np.arange(30, 13, -1)
@@ -355,8 +375,8 @@ def BandpowerFisher(params, RSDPower, kmin = 0, kmax = 2):
             if neg == 0 : break
         if rc == 13 : raise ValueError("Inversion failed : rcond exceeds 1e-15")   
         """
-        FisherBand_tot = np.dot( np.dot( datav, Fisher3_tot), datav.T)
-        #FisherBand_tot = FisherProjection_Fishergiven(datav, Fisher3_tot)
+        #FisherBand_tot = np.dot( np.dot( datav, Fisher3_tot), datav.T)
+        FisherBand_tot = FisherProjection_Fishergiven(datav, Fisher3_tot)
         f3 = 'data_txt/cov/'+params['name']+'_bandpower_tot.fisher'
         np.savetxt(f3, FisherBand_tot)
         params['fisher_bandpower_tot_filename']= f3
@@ -430,8 +450,8 @@ def DirectProjection_to_params(params, RSDPower, parameter =[0,1,2,3], kmin = 0,
     
     ## calling stored cov and datavector
     covPP = np.genfromtxt(params['covPP_filename'])
-    covXi = np.genfromtxt(params['covXi_filename'])
-    covPXi = masking(RSDPower, np.genfromtxt(params['covPXi_filename']), kmin = kmin, kmax = kmax)
+    covXi = masking(RSDPower, np.genfromtxt(params['covXi_filename']), xi=True, lmax=lmax)
+    covPXi = masking(RSDPower, np.genfromtxt(params['covPXi_filename']), kmin = kmin, kmax = kmax, lmax=lmax)
     
     #covPP_masked = masking(RSDPower, covPP, kmin = kmin, kmax = kmax)
     #C_tot = np.concatenate((np.concatenate((covPP_masked, covPXi), axis=1),\
@@ -439,7 +459,7 @@ def DirectProjection_to_params(params, RSDPower, parameter =[0,1,2,3], kmin = 0,
     
     params_datav = np.genfromtxt(params['params_datavector_filename'])
     params_datav_mar = np.vstack(([ params_datav[p,:] for p in parameter] ))
-    params_datav_mar_kcut = masking_datav(RSDPower, params_datav_mar, kmin=kmin, kmax=kmax)
+    params_datav_mar_kcut = masking_datav(RSDPower, params_datav_mar, kmin=kmin, kmax=kmax, lmax=lmax)
       
     params_xi_datav = np.genfromtxt(params['params_xi_datavector_filename'])
     params_xi_datav_mar = np.vstack(([ params_xi_datav[p,:] for p in parameter] ))
@@ -458,7 +478,7 @@ def DirectProjection_to_params(params, RSDPower, parameter =[0,1,2,3], kmin = 0,
     from test_SNR import blockwiseInversion
     
     if 'fisher_bandpower_P_filename' not in params: FisherP = pinv(covPP)
-    else : FisherP = masking(RSDPower, np.genfromtxt(params['fisher_bandpower_P_filename']), kmin=kmin, kmax=kmax)
+    else : FisherP = masking(RSDPower, np.genfromtxt(params['fisher_bandpower_P_filename']), kmin=kmin, kmax=kmax, lmax=lmax)
                              
     F_params_P = np.dot(np.dot(params_datav_mar_kcut,FisherP), params_datav_mar_kcut.T)
     
@@ -768,24 +788,24 @@ def Reid_error(params, RSDPower, parameter = [0,1,2,3]):
 
                         
 ########## main #######
-#if '__name__'=='__main__':
-"""
-import warnings
+if __name__=='__main__':
 
-def fxn():
-    warnings.warn("deprecated", DeprecationWarning)
-with warnings.catch_warnings():
-    warnings.simplefilter("ignore")
-    fxn()
+    import warnings
 
-parser = argparse.ArgumentParser(description='call run_error_analysis outside the pipeline')
-parser.add_argument("parameter_file", help="YAML configuration file")
-args = parser.parse_args()
-try:
-    param_file = args.parameter_file   
-except SystemExit:
-    sys.exit(1)
+    def fxn():
+        warnings.warn("deprecated", DeprecationWarning)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        fxn()
 
-params = yaml.load(open(param_file))
-run_error_analysis(params)
-"""
+    parser = argparse.ArgumentParser(description='call run_error_analysis outside the pipeline')
+    parser.add_argument("parameter_file", help="YAML configuration file")
+    args = parser.parse_args()
+    try:
+        param_file = args.parameter_file   
+    except SystemExit:
+        sys.exit(1)
+
+    params = yaml.load(open(param_file))
+    run_error_analysis(params)
+
