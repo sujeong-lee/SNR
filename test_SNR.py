@@ -85,10 +85,10 @@ Detailed descriptions are included in the class code.
 import time, datetime
 import numpy as np
 from numpy import zeros, sqrt, pi, vectorize
-from numpy.linalg import pinv, inv
+from numpy.linalg import pinv as inv
 from multiprocessing import Process, Queue
-import matplotlib
-matplotlib.use('Agg')
+#import matplotlib
+#matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from error_analysis_class import *
 from noshellavg import *
@@ -202,6 +202,8 @@ def ReidResult(RSDPower, rmin, rmax, kmin, kmax):
                    RSDPower.dxis2[rcut_max:rcut_min+1],\
                    RSDPower.dxis4[rcut_max:rcut_min+1]]
     
+    
+    
     Fisherb = []
     Fisherf = []
     Fisherb_det = []
@@ -209,7 +211,7 @@ def ReidResult(RSDPower, rmin, rmax, kmin, kmax):
     rrlist = []
     for l in range(RSDPower.rcenter[rcut_max:rcut_min+1].size):
         C_matrix3 = CombineCovariance3(l, matricesXi)
-        FisherXi = pinv(C_matrix3)
+        FisherXi = inv(C_matrix3)
         DataVec, DataVec2 = CombineDevXi(l, matrices2Xi)
         Fisher = np.dot( np.dot( DataVec, FisherXi), DataVec.T )
         Cov = inv(Fisher)
@@ -257,23 +259,37 @@ def blockwise( matrix ):
     w = matrix[-1:, 0:-1]
     #wT = matrix[0:-1, -1:]
     d = matrix[-1, -1]
-    
-    F_upleft = s - np.dot( w.T, w )/d
 
+    if d != 0.0 : F_upleft = s - np.dot( w.T, w )/d
+    if d == 0.0 : F_upleft = s
+    return F_upleft
+
+
+def blockwise3x3( matrix ):
+
+    # F_upleft = a - b d^-1 c
+
+    s = matrix[0:-3, 0:-3]
+    w = matrix[-3:, 0:-3]
+    #wT = matrix[0:-1, -1:]
+    d = matrix[-3:, -3:]
+    
+    #F_upleft = s - np.dot( w.T, w )/d
+    F_upleft = s - np.dot( np.dot( w.T, inv(d)), w)
     return F_upleft
 
 
 def blockwiseInversion( matrix, cutInd ):
 
-    from numpy.linalg import pinv
+    from numpy.linalg import inv
     
     a = matrix[0:cutInd+1, 0:cutInd+1]
     b = matrix[0:cutInd+1, cutInd+1:]
     c = b.T #matrix[cutInd+1:, 0:cutInd+1]
     d = matrix[cutInd+1:, cutInd+1:]
-    ia = pinv(a)
+    ia = inv(a)
 
-    Fd = pinv( d - np.dot( np.dot( c, ia ), b) )
+    Fd = inv( d - np.dot( np.dot( c, ia ), b) )
     Fc = - np.dot( np.dot( Fd, c), ia)
     Fb = - np.dot( np.dot( ia, b ), Fd )
     Fa = ia + np.dot( np.dot (np.dot( np.dot( ia, b), Fd ), c), ia)
@@ -282,30 +298,59 @@ def blockwiseInversion( matrix, cutInd ):
     return F
 
 
-def reordering( RSDPower, matrix, cut = None ):
 
-    if cut is None : cut = RSDPower.kcenter_y.size  #len(RSDPower.kcenter)
+def _reordering( RSDPower, matrix ):
+
+    #if cut is None : cut = RSDPower.kcenter_y.size  #len(RSDPower.kcenter)
     
+    cut = matrix.shape[0]/3
     part00 = matrix[0:cut, 0:cut]
     part02 = matrix[0:cut, cut:2*cut]
-    part04 = matrix[0:cut, 2*cut:3*cut+1]
+    part04 = matrix[0:cut, 2*cut:]
     part22 = matrix[cut:2*cut, cut:2*cut]
-    part24 = matrix[cut:2*cut, 2*cut:3*cut+1]
-    part44 = matrix[2*cut:3*cut+1, 2*cut:3*cut+1]
+    part24 = matrix[cut:2*cut, 2*cut:]
+    part44 = matrix[2*cut:, 2*cut:]
 
-    ReorderedF = np.zeros(( 3*cut, 3*cut))
+    ReorderedF = np.zeros(( matrix.shape ))
+    
+    for i in range(cut):
+        for j in range(cut):
+            ReorderedF[3*i, 3*j] = part00[i,j]
+            ReorderedF[3*i, 3*j+1] = part02[i,j]
+            ReorderedF[3*i+1, 3*j] = part02[j,i]
+            ReorderedF[3*i, 3*j+2] = part04[i,j]
+            ReorderedF[3*i+2, 3*j] = part04[j,i]
+            ReorderedF[3*i+1, 3*j+1] = part22[i,j]
+            ReorderedF[3*i+1, 3*j+2] = part24[i,j]
+            ReorderedF[3*i+2, 3*j+1] = part24[j,i]
+            ReorderedF[3*i+2, 3*j+2] = part44[i,j]
+
+    return ReorderedF
+
+
+def reordering( RSDPower, matrix ):
+
+    #if cut is None : cut = RSDPower.kcenter_y.size  #len(RSDPower.kcenter)
+    
+    cut = matrix[:,0].size/3
+    part00 = matrix[0:cut, 0:cut]
+    part02 = matrix[0:cut, cut:2*cut]
+    part04 = matrix[0:cut, 2*cut:]
+    part22 = matrix[cut:2*cut, cut:2*cut]
+    part24 = matrix[cut:2*cut, 2*cut:]
+    part44 = matrix[2*cut:, 2*cut:]
+
+    ReorderedF = np.zeros(( matrix.shape ))
     
     ReorderedP = np.zeros(3 * cut)
     
-    ind = np.arange(0,3 * cut, 3)
+    ind = np.arange(0,3*cut, 3)
     ind2 = ind + 1
     ind3 = ind + 2
     
     ReorderedP[ind] = RSDPower.multipole_bandpower0
     ReorderedP[ind2] = RSDPower.multipole_bandpower2
     ReorderedP[ind3] = RSDPower.multipole_bandpower4
-    
-    print part00.shape
     
     for i in range(cut):
         for j in range(cut):
@@ -322,37 +367,81 @@ def reordering( RSDPower, matrix, cut = None ):
     return ReorderedF, ReorderedP
 
 
+
+    
 def reorderingVector( vector ):
     
-    try :
-        cut = len(vector[0][0,:])
-        ReorderedP = np.zeros(( vector[0][:, 0].size ,3 * cut))
+    #if len(vector) > 1: vector = np.hstack(vector)
         
-        ind = np.arange(0,3 * cut, 3)
-        ind2 = ind + 1
-        ind3 = ind + 2
-        
-        for i in range( vector[0][:, 0].size ):
-            ReorderedP[i,:][ind] = vector[0][i,:]
-            ReorderedP[i,:][ind2] = vector[1][i,:]
-            ReorderedP[i,:][ind3] = vector[2][i,:]
+    try : 
+        nx, ny = vector.shape
+        ReorderedP = np.zeros((vector.shape))
+        ind = np.arange(0, ny, 3)
 
-    except IndexError:
-        
-        vector = np.array(vector)
-        cut = vector[0].size
-        ReorderedP = np.zeros(vector.size)
-        
-        ind = np.arange(0,3 * cut, 3)
-        ind2 = ind + 1
-        ind3 = ind + 2
+        Ny = ny/3
+        for j in range(Ny):
+            for i in range(nx):
+                ReorderedP[i,:][ind] = vector[i][:Ny]
+                ReorderedP[i,:][ind+1] = vector[i][Ny:Ny*2]
+                ReorderedP[i,:][ind+2] = vector[i][2*Ny:3*Ny]
 
-        ReorderedP[ind] = vector[0]
-        ReorderedP[ind2] = vector[1]
-        ReorderedP[ind3] = vector[2]
+    except : 
+ 
+        Nx = vector.size/3
+        ReorderedP = np.zeros((vector.shape))
+        ind = np.arange(0,vector.size, 3)
 
+        Nx = vector.size/3
+        ReorderedP[ind] = vector[:Nx]
+        ReorderedP[ind+1] = vector[Nx:Nx*2]
+        ReorderedP[ind+2] = vector[Nx*2:Nx*3]
+    
     return ReorderedP
 
+
+
+def _reorderingVector( vector ):
+    
+    n = len(vector)    
+    
+    try :     
+        
+        cut = len(vector[0][0,:])
+        ReorderedP = np.zeros(( vector[0][:, 0].size ,n * cut))
+        
+        ind = np.arange(0,n * cut, n)
+        #ind2 = ind + 1
+        #ind3 = ind + 2
+        
+        for i in range( vector[0][:, 0].size ):
+            for j in range(n):
+                IND = ind + j
+                ReorderedP[i,:][IND] = vector[j][i,:]
+            #ReorderedP[i,:][ind] = vector[0][i,:]
+            #ReorderedP[i,:][ind2] = vector[1][i,:]
+            #ReorderedP[i,:][ind3] = vector[2][i,:]
+    
+    
+    except IndexError:
+        cut = vector[0].size
+        vector = np.array(vector)
+        ReorderedP = np.zeros(vector.size)
+        
+        ind = np.arange(0, n * cut, n)
+        #ind2 = ind + 1
+        #ind3 = ind + 2
+
+        for j in range(n):
+            IND = ind + j
+            ReorderedP[IND] = vector[j]
+
+
+            #ReorderedP[ind] = vector[0]
+            #ReorderedP[ind2] = vector[1]
+            #ReorderedP[ind3] = vector[2]
+
+    return ReorderedP
+    
 
 
 
@@ -360,8 +449,12 @@ def convergence_Xi(RSDPower, rmin, rmax, kmin, kmax):
     
     from noshellavg import get_closest_index_in_data
     
-    kcut_min = get_closest_index_in_data( kmin, RSDPower.kmin_y )
-    kcut_max = get_closest_index_in_data( kmax, RSDPower.kmax_y )
+    if kmin is None :
+        kcut_min = 0
+        kcut_max = RSDPower.dxip0[:,0].size
+    else:
+        kcut_min = get_closest_index_in_data( kmin, RSDPower.kmin_y )
+        kcut_max = get_closest_index_in_data( kmax, RSDPower.kmax_y )
     rcut_min = get_closest_index_in_data( rmin, RSDPower.rmin )
     rcut_max = get_closest_index_in_data( rmax, RSDPower.rmax )
 
@@ -376,18 +469,18 @@ def convergence_Xi(RSDPower, rmin, rmax, kmin, kmax):
                   np.transpose(RSDPower.covariance24[rcut_max:rcut_min+1,rcut_max:rcut_min+1]),\
                   RSDPower.covariance44[rcut_max:rcut_min+1,rcut_max:rcut_min+1]]
     
-    Xizeros = np.zeros(RSDPower.dxip0.shape)[:,rcut_max:rcut_min+1]
+    Xizeros = np.zeros(RSDPower.dxip0.shape)[kcut_min:kcut_max+1,rcut_max:rcut_min+1]
 
     
-    matrices2Xi = [RSDPower.dxip0[:,rcut_max:rcut_min+1]
+    matrices2Xi = [RSDPower.dxip0[kcut_min:kcut_max+1:,rcut_max:rcut_min+1]
                    , Xizeros
                    , Xizeros
                    , Xizeros
-                   , RSDPower.dxip2[:,rcut_max:rcut_min+1]
+                   , RSDPower.dxip2[kcut_min:kcut_max+1:,rcut_max:rcut_min+1]
                    , Xizeros
                    , Xizeros
                    , Xizeros
-                   , RSDPower.dxip4[:,rcut_max:rcut_min+1]]
+                   , RSDPower.dxip4[kcut_min:kcut_max+1:,rcut_max:rcut_min+1]]
     
     multipole_P0, multipole_P2, multipole_P4 = RSDPower.multipole_bandpower0, RSDPower.multipole_bandpower2, RSDPower.multipole_bandpower4
     
@@ -405,35 +498,16 @@ def convergence_Xi(RSDPower, rmin, rmax, kmin, kmax):
     print 'sum of Fisher', np.sum(Fisher_bandpower_Xi)
     #print 'diagonal comp', Fisher_bandpower_Xi.diagonal()
     
-    matrix1, matrix2 = np.mgrid[0:RSDPower.kcenter_y.size, 0:RSDPower.kcenter_y.size]
+    cut = kcut_max - kcut_min
+    matrix1, matrix2 = np.mgrid[0:cut, 0:cut]
     P1 = RSDPower.multipole_bandpower0[matrix1]
-    
-    """
-    fig, (ax, ax2) = plt.subplots(1,2)
-    CSNRmatrix = Fisher_bandpower_Xi[0:RSDPower.kcenter_y.size, 0:RSDPower.kcenter_y.size] * P1 * P1.T
-    im = ax.imshow(CSNRmatrix)
-    fig.colorbar(im, ax=ax)
-    for i in range(0, RSDPower.kcenter_y.size, 5):
-        ax2.plot(RSDPower.kcenter_y, CSNRmatrix[i,:], '-', label='k={}'.format(RSDPower.kcenter_y[i]))
-    ax2.legend(loc = 'best')
-    """
     
     #cut = RSDPower.kcenter_y.size
     #part00 = blockwise(Fisher_bandpower_Xi, cut)
     
-    
+    """
     Cov_bandpower_Xi = inv( Fisher_bandpower_Xi ) #, rcond = 1e-10 )
-    """
-    eigF = np.linalg.eigvalsh( Fisher_bandpower_Xi )
-    eigC = np.linalg.eigvalsh( Cov_bandpower_Xi )
-    #fig, ax = plt.subplots()
-    array = np.arange(1, eigF.size+1)
-    plt.plot(array, eigF, '.', label='eigF')
-    plt.plot(array, 1./eigC[::-1], '.', label='eigC')
-    plt.legend()
-    """
-
-    cut = RSDPower.kcenter_y.size  #len(RSDPower.kcenter)
+    #cut = RSDPower.kcenter_y.size  #len(RSDPower.kcenter)
     part00 = Cov_bandpower_Xi[0:cut, 0:cut]
     part02 = Cov_bandpower_Xi[0:cut, cut:2*cut]
     part04 = Cov_bandpower_Xi[0:cut, 2*cut:3*cut+1]
@@ -445,17 +519,14 @@ def convergence_Xi(RSDPower, rmin, rmax, kmin, kmax):
     
     Cov_bandpower_Xi_combine = CombineCovariance3(cut, part_list)
     part_Fisher_bandpower_Xi = inv( Cov_bandpower_Xi_combine )
-    
+    """
     # blockwise method
-    F, P = reordering( RSDPower, Fisher_bandpower_Xi )
-
+    F, P = reordering( RSDPower, Fisher_bandpower_Xi)
 
     SNRlist2 = []
     SNR = np.dot( np.dot(P, F), P.T )
     SNRlist2.append(SNR)
-
-
-    for j in range(1, RSDPower.kcenter_y.size):
+    for j in range(1, cut):
         P = P[:-3]
         for i in range(0,3):
             F = blockwise( F )
@@ -463,14 +534,13 @@ def convergence_Xi(RSDPower, rmin, rmax, kmin, kmax):
         SNR = np.dot( np.dot(P, F), P.T )
         SNRlist2.append(SNR)
 
-
     #SNRlist2 = np.array(SNRlist2).ravel()
     #SNRlist2 = [ SNRlist2[3*i] for i in range(RSDPower.kcenter_y.size) ]
     SNRlist2 = np.array(SNRlist2[::-1]).ravel()
 
     #return RSDPower.kcenter_y, SNRlist, SNRlist2
 
-    
+    """
     SNR_Xi_list = []
     kklist = []
 
@@ -486,7 +556,8 @@ def convergence_Xi(RSDPower, rmin, rmax, kmin, kmax):
 
     #diagonal = Fisher_bandpower_Xi.diagonal() / data_Vec**2
     SNR_Xi_list = np.array(SNR_Xi_list).ravel()
-    return kklist, SNRlist2
+    """
+    return RSDPower.kcenter_y[kcut_min:kcut_max + 1], SNRlist2
 
 
 
@@ -517,8 +588,7 @@ def convergence_P(RSDPower, kmin, kmax):
     #from linear import Covariance_PP, Pmultipole
     kcut_min = get_closest_index_in_data( kmin, RSDPower.kmin_y )
     kcut_max = get_closest_index_in_data( kmax, RSDPower.kmax_y )
-    #l = kcut_max - kcut_min
-    print RSDPower.kcenter_y[kcut_min]
+    #l = kcut_max - kcut_min
 
     multipole_P0, multipole_P2, multipole_P4 = RSDPower.multipole_bandpower0[kcut_min:kcut_max+1], RSDPower.multipole_bandpower2[kcut_min:kcut_max+1], RSDPower.multipole_bandpower4[kcut_min:kcut_max+1]
     
@@ -648,7 +718,7 @@ def BinAvgSNR_P(RSDPower, kmin, kmax ):
 
 
 
-def CombineEstimator(RSDPower, rmin, rmax, kmin, kmax ):
+def CombineEstimator(RSDPower, rmin, rmax, kmin, kmax, n=False ):
     
     from numpy.linalg import inv
     from noshellavg import CombineDevXi, confidence_ellipse, FisherProjection_Fishergiven
@@ -688,13 +758,7 @@ def CombineEstimator(RSDPower, rmin, rmax, kmin, kmax ):
                   RSDPower.covariance_PP04[kcut_min:kcut_max+1,kcut_min:kcut_max+1],
                   RSDPower.covariance_PP24[kcut_min:kcut_max+1,kcut_min:kcut_max+1],
                   RSDPower.covariance_PP44[kcut_min:kcut_max+1,kcut_min:kcut_max+1]]
-    """
-    matricesPXi = [RSDPower.covariance_PXi00, RSDPower.covariance_PXi02,\
-                   RSDPower.covariance_PXi04, RSDPower.covariance_PXi20,\
-                   RSDPower.covariance_PXi22, RSDPower.covariance_PXi24,\
-                   RSDPower.covariance_PXi40, RSDPower.covariance_PXi42,\
-                   RSDPower.covariance_PXi44 ]
-    """
+
     matricesPXi = [RSDPower.covariance_PXi00[kcut_min:kcut_max+1,rcut_max:rcut_min+1],\
                    RSDPower.covariance_PXi02[kcut_min:kcut_max+1,rcut_max:rcut_min+1],\
                    RSDPower.covariance_PXi04[kcut_min:kcut_max+1,rcut_max:rcut_min+1],\
@@ -764,7 +828,7 @@ def CombineEstimator(RSDPower, rmin, rmax, kmin, kmax ):
     """
 
     #inverse
-    FisherP = pinv(C_matrix3PP_all)
+    FisherP = inv(C_matrix3PP_all)
     #FisherXi = pinv(C_matrix3Xi)
     #Fisher3_tot = pinv(C_matrix3_tot)
     Fisher3_tot = blockwiseInversion( C_matrix3_tot, 3 * (kcut_max+1-kcut_min) )
@@ -789,7 +853,6 @@ def CombineEstimator(RSDPower, rmin, rmax, kmin, kmax ):
     FisherBand_P = FisherP.copy()
     FisherBand_Xi = FisherProjection_Fishergiven(derivative_correl_avg, FisherXi)
     FisherBand_tot = FisherProjection_Fishergiven(Derivatives, Fisher3_tot)
-
 
 
 
@@ -1040,7 +1103,7 @@ def CombineEstimator(RSDPower, rmin, rmax, kmin, kmax ):
     SNR2 = []
     for l in range(1, RSDPower.kcenter_y.size):
         C = CP[0:3 * l, 0:3 * l]
-        FP = pinv(C)
+        FP = inv(C)
         snr = np.dot( np.dot( reorderedP[0:3*l], FP ), reorderedP[0:3*l].T )
         SNR2.append(snr)
         rrlist2.append(np.pi / RSDPower.kcenter_y[l])
@@ -1071,7 +1134,7 @@ def CombineEstimator(RSDPower, rmin, rmax, kmin, kmax ):
     SNRP_m = [[], [], []]
     for i in range(3):
         for l in range(1, RSDPower.kcenter_y.size):
-            FP = pinv(C[i][0:l, 0:l])
+            FP = inv(C[i][0:l, 0:l])
             snr = np.dot( np.dot( P[i][0:l], FP ), P[i][0:l].T )
             SNRP_m[i].append(snr)
             rrlist2_m[i].append(np.pi / RSDPower.kcenter_y[l])
@@ -1140,7 +1203,7 @@ def CombineEstimator(RSDPower, rmin, rmax, kmin, kmax ):
     Fisherf_det = []
     rrlist = []
     
-    FisherXi = pinv(C_matrix3Xi)
+    FisherXi = inv(C_matrix3Xi)
     
     
     Fisher = np.dot(np.dot(dxip, FisherXi), dxip.T)
@@ -1159,7 +1222,7 @@ def CombineEstimator(RSDPower, rmin, rmax, kmin, kmax ):
 
     for l in range(1, rcut_min+1-rcut_max, 2):
         C_matrix3 = C_matrix3Xi[0:-3 * l, 0:-3 * l]
-        FisherXi = pinv(C_matrix3)
+        FisherXi = inv(C_matrix3)
         dx = dxip[:, 0:-3 * l]
         Fisher = np.dot(np.dot(dx, FisherXi), dx.T)
         FReid = np.dot( np.dot( dPbfs, Fisher), dPbfs.T )
@@ -1250,13 +1313,24 @@ def CombineEstimator(RSDPower, rmin, rmax, kmin, kmax ):
     XP, XP2 = CombineDevXi(l1, matrices2P)
     XP_cut, XP2_cut = CombineDevXi(l3, matrices2P_cut)
 
+    n = True
+    if n == True:
+        dPN0 = np.ones(RSDPower.kcenter_y.size)
+        dPN1 = np.zeros(RSDPower.kcenter_y.size)
+        dPN2 = dPN1.copy()
+        XP = np.vstack((XP,np.array([dPN0, dPN1, dPN2]).ravel()))
+        XP_cut = np.vstack((XP_cut, np.array([dPN0[kcut_min:kcut_max+1], dPN1[kcut_min:kcut_max+1], dPN2[kcut_min:kcut_max+1]]).ravel()))
+        #matrices2P = matrices2P + [dPN0, dPN1, dPN2]
+        #matrices2P_cut = matrices2P_cut + [dPN0[kcut_min:kcut_max+1], dPN1[kcut_min:kcut_max+1], dPN2[kcut_min:kcut_max+1]]
+    
+    
     FisherPP = np.dot( np.dot( XP_cut, inv(C_matrix3PP)), XP_cut.T)
     FisherXi = np.dot( np.dot( XP, FisherBand_Xi), XP.T)
     Fishertot = np.dot( np.dot( XP, FisherBand_tot), XP.T)
     
-    Cov_PP = pinv(FisherPP)[0:2,0:2]
-    Cov_Xi = pinv(FisherXi)[0:2,0:2]
-    Cov_tot = pinv(Fishertot)[0:2,0:2]
+    Cov_PP = inv(FisherPP)[0:2,0:2]
+    Cov_Xi = inv(FisherXi)[0:2,0:2]
+    Cov_tot = inv(Fishertot)[0:2,0:2]
 
     elllist = confidence_ellipse(RSDPower.b, RSDPower.f, Cov_PP, Cov_Xi, Cov_tot)
 
@@ -1266,10 +1340,10 @@ def CombineEstimator(RSDPower, rmin, rmax, kmin, kmax ):
         #e.set_alpha(0.2)
         e.set_clip_box(ax.bbox)
 
-    xmin =  RSDPower.b*0.97
-    xmax =  RSDPower.b*1.03
-    ymin =  RSDPower.f*0.92
-    ymax =  RSDPower.f*1.08
+    xmin = RSDPower.b*0.97
+    xmax = RSDPower.b*1.03
+    ymin = RSDPower.f*0.92
+    ymax = RSDPower.f*1.08
     ax.set_xlim(xmin, xmax)
     ax.set_ylim(ymin, ymax)
     ax.set_xlabel('b')
@@ -1279,7 +1353,8 @@ def CombineEstimator(RSDPower, rmin, rmax, kmin, kmax ):
     #ax.set_title( 'error ellipse of b and f, s marginalized, RSD scale ( r24-152, k0.01-0.2 )' )
     #ax.set_title( 'error ellipse of b and f, s marginalized, BAO scale ( r29-200, k0.02-0.3 )' )
     ax.set_title( 'error ellipse of b and f, s marginalized, ( r0.1-200, k0.001-1 )' )
-
+    fig.savefig('figure/ellipse.png')
+    plt.close(fig)
 
 
 def Cumulative_SNR_loop(RSDPower, kmin, kmax, l):
@@ -1505,19 +1580,22 @@ def main_SNR(rmin = None, rmax = None):
     #kklist, BinSNRP = BinAvgSNR_P(RSDPower, kmin, kmax)
     
     fig, ax = plt.subplots()
-    kkk = np.logspace(np.log10(kmin), np.log10(kmax), 10)
+    kkk = np.logspace(np.log10(kmin), np.log10(kmax), 20)
     for i in range(kkk.size -1):
         label = '[{:>0.2f}, {:>0.2f}]'.format(kkk[i], kkk[i+1])
-        #kklist, SNRPP = convergence_P(RSDPower, kkk[i], kkk[i+1])
+        kklist, SNRPP = convergence_P(RSDPower, kkk[i], kkk[i+1])
         #kklist, SNRPP = BinAvgSNR_P(RSDPower, kkk[i], kkk[i+1])
-        kklist, SNRXI = convergence_Xi(RSDPower, rmin, rmax, kkk[i], kkk[i+1])
-        ax.plot(kklist, SNRXI, '.', label = label)
-    ax.set_xscale('log')
-    ax.set_yscale('log')
+        kklist2, SNRXI = convergence_Xi(RSDPower, rmin, rmax, kkk[i], kkk[i+1])
+        ax.plot(kklist, SNRPP/kklist, linestyle = '--', label = label)
+        ax.plot(kklist2, SNRXI/kklist2, linestyle = '-', color = ax.lines[-1].get_color())
+    ax.set_xscale('linear')
+    ax.set_yscale('linear')
     ax.set_xlabel('k')
-    ax.set_ylabel('Delta SNR Xi')
+    ax.set_ylim(1e-12, 1e+10)
+    ax.set_ylabel('Delta SNR/k')
+    ax.set_title('SNR P (dashed) Xi(solid)')
     ax.legend(loc='best')
-    fig.savefig('figure/DeltaSNR_Xi.png')
+    fig.savefig('figure/DeltaSNR2.png')
     plt.close(fig)
 
 
@@ -1657,9 +1735,6 @@ def main_SNR(rmin = None, rmax = None):
     ax2.legend(loc='best')
 
     """
-
-
-
 
 
 
