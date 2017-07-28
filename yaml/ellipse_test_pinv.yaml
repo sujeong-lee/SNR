@@ -1,4 +1,4 @@
-name : ellipse_test
+name : ellipse_test_pinv
 k : [0.0000000001, 0.2, 1000]  #[kmin, kmax, kN]
 r : [20, 160, 141]  #[rmin, rmax, rN]
 logscale : False
@@ -14,8 +14,8 @@ derivative_P_filename : data_txt/datav/ellipse_test_P.datavector  # no kcut
 derivative_Xi_filename : data_txt/datav/ellipse_test_Xi.datavector
 params_datavector_filename : data_txt/datav/ellipse_test_params.datavector #no kmin kmax cut
 
-#fisher_bandpower_P_filename : data_txt/cov/ellipse_test_bandpower_PP.fisher # kmin kcut applied
-#fisher_bandpower_Xi_filename : data_txt/cov/ellipse_test_bandpower_Xi.fisher
+fisher_bandpower_P_filename : data_txt/cov/ellipse_test_bandpower_PP.fisher # kmin kcut applied
+fisher_bandpower_Xi_filename : data_txt/cov/ellipse_test_bandpower_Xi.fisher
 #fisher_bandpower_tot_filename : data_txt/cov/ellipse_test_bandpower_tot.fisher #kmin kcut applied in PP side before projection
 
 ######## output ##########

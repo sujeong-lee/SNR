@@ -1,0 +1,23 @@
+name : reid_bf_kN1000_rN450
+k : [0.01, 2, 1000]  #[kmin, kmax, kN]
+r : [0.001, 180, 451]  #[rmin, rmax, rN]
+logscale : False
+parameter_ind : [0,1]
+lmax : 4
+
+# precalculated filename
+#covPP_filename : data_txt/cov/reid_bf_kN1000_rN360_PP.cov # no kmin kmax cut
+#covXi_filename : data_txt/cov/reid_bf_kN1000_rN360_Xi.cov  
+#covPXi_filename : data_txt/cov/reid_bf_kN1000_rN360_PXi.cov # no kmin kmax cut
+#multipole_p_filename : data_txt/datav/reid_bf_kN1000_rN360_multipole_p.datavector # no kcut
+#derivative_P_filename : data_txt/datav/reid_bf_kN1000_rN360_P.datavector  # no kcut
+#derivative_Xi_filename : data_txt/datav/reid_bf_kN1000_rN360_Xi.datavector 
+#params_datavector_filename : data_txt/datav/reid_bf_kN1000_rN360_params.datavector #no kmin kmax cut
+
+#fisher_bandpower_P_filename : data_txt/cov/reid_bf_kN1000_rN90_bandpower_PP.fisher # kmin kcut applied
+#fisher_bandpower_Xi_filename : data_txt/cov/reid_bf_kN1000_rN360_bandpower_Xi.fisher
+#fisher_bandpower_tot_filename : data_txt/cov/reid_bf_kN1000_rN360_bandpower_tot.fisher #kmin kcut applied in PP side before projection
+
+######## output ##########
+SNR : 1
+Reid : 0

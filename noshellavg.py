@@ -409,7 +409,7 @@ def CombineDevXi(l, matrices):
 
 
 
-def confidence_ellipse(x_center, y_center, *args):
+def confidence_ellipse(x_center, y_center, linestyle, linecolor, *args):
     import numpy as np
     import matplotlib.pyplot as plt
     from pylab import figure, show, rand
@@ -417,8 +417,8 @@ def confidence_ellipse(x_center, y_center, *args):
     
     # For BAO and RSDscales
 
-    linecolor = ['b', 'r', 'g', 'b', 'r', 'g', 'y', 'c', 'k']
-    linestyle = ['solid', 'solid', 'solid', 'dashed', 'dashed', 'dashed', 'solid', 'solid', 'solid']
+    if linecolor == None : linecolor = ['b', 'r', 'g', 'b', 'r', 'g', 'y', 'c', 'k']
+    if linestyle == None : linestyle = ['solid', 'solid', 'solid', 'dashed', 'dashed', 'dashed', 'solid', 'solid', 'solid']
     ziplist = zip(args, linecolor, linestyle)
     
     def eigsorted(cov):

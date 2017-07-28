@@ -1,23 +1,23 @@
-name : test
-k : [0.01, 0.25, 50]  #[kmin, kmax, kN]
-r : [0.1, 180, 20]  #[rmin, rmax, rN]
+name : test_kN200_rN180
+k : [0.0000000001, 2, 200]  #[kmin, kmax, kN]
+r : [0.001, 180, 181]  #[rmin, rmax, rN]
 logscale : False
-parameter_ind : [0,1]
-
+parameter_ind : [0,1, 2]
+lmax : 4
 
 # precalculated filename
-#covPP_filename : data_txt/cov/default_kN1000_PP.cov # no kmin kmax cut
-#covXi_filename : data_txt/cov/test_bf_Xi.cov  
-#covPXi_filename : data_txt/cov/test_bf_PXi.cov # no kmin kmax cut
-#multipole_p_filename : data_txt/datav/default_kN1000_multipole_p.datavector # no kcut
-#derivative_P_filename : data_txt/datav/default_kN1000_P.datavector  # no kcut
-#derivative_Xi_filename : data_txt/datav/test_bf_Xi.datavector 
-#params_datavector_filename : data_txt/datav/test_bf_params.datavector #no kmin kmax cut
+covPP_filename : data_txt/cov/test_kN200_rN180_PP.cov # no kmin kmax cut
+covXi_filename : data_txt/cov/test_kN200_rN180_Xi.cov  
+covPXi_filename : data_txt/cov/test_kN200_rN180_PXi.cov # no kmin kmax cut
+#multipole_p_filename : data_txt/datav/test_kN200_rN180_multipole_p.datavector # no kcut
+derivative_P_filename : data_txt/datav/test_kN200_rN180_P.datavector  # no kcut
+derivative_Xi_filename : data_txt/datav/test_kN200_rN180_Xi.datavector 
+params_datavector_filename : data_txt/datav/test_kN200_rN180_params.datavector #no kmin kmax cut
 
-#fisher_bandpower_PP_filename : data_txt/cov/test_bf_bandpower_PP.fisher # kmin kcut applied
-#fisher_bandpower_Xi_filename : data_txt/cov/test_bf_bandpower_Xi.fisher
-#fisher_bandpower_tot_filename : data_txt/cov/test_bf_bandpower_tot.fisher #kmin kcut applied in PP side before projection
+fisher_bandpower_P_filename : data_txt/cov/test_kN200_rN180_bandpower_PP.fisher # kmin kcut applied
+fisher_bandpower_Xi_filename : data_txt/cov/test_kN200_rN180_bandpower_Xi.fisher
+#fisher_bandpower_tot_filename : data_txt/cov/test_kN200_rN180_bandpower_tot.fisher #kmin kcut applied in PP side before projection
 
 ######## output ##########
-SNR : 0
+SNR : 1
 Reid : 0
