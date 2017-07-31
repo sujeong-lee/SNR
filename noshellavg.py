@@ -439,6 +439,7 @@ def confidence_ellipse(x_center, y_center, linestyle, linecolor, *args):
               width=w, height=h,
               angle=theta, color = z[1], ls = z[2], lw=1.5, fc= 'None')
         elllist.append(ell)
+        
     return elllist
 
     """
