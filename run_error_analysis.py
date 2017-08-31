@@ -14,7 +14,7 @@ from matplotlib.backends.backend_pdf import PdfPages
 import sys
 import argparse
 import yaml
-#from run_cosmolike_mpp import *
+
 
 
     
@@ -23,11 +23,20 @@ def run_error_analysis(params):
     kmin, kmax, kN = params['k']
     rmin, rmax, rN = params['r']
     logscale = params['logscale']
-    KMIN, KMAX = 1e-10, 2.0
+    KMIN, KMAX = 1e-3, 2.0
     lmax = params['lmax']
     parameter_ind = params['parameter_ind']   
     
-    RSDPower = NoShell_covariance(KMIN, KMAX, rmin, rmax, 2**10 + 1, rN, 1, kN, logscale = logscale)
+    b = 2.0
+    if 'b' in params: b = params['b']
+    f = 0.74
+    if 'f' in params: f = params['f']
+    s = 3.5
+    if 's' in params: s = params['s']
+    nn = 3.0 * 10**(-4) #1/n
+    if 'nn' in params: nn = params['nn']
+    
+    RSDPower = NoShell_covariance(KMIN, KMAX, rmin, rmax, 2**10 + 1, rN, 1, kN, b,f,s,nn,logscale = logscale)
     Covariance_matrix(params, RSDPower)
     
     
@@ -61,7 +70,8 @@ def run_error_analysis(params):
         else : 
             print '\nUse Precalculated params_si_datavector ', params['params_xi_datavector_filename'] 
         DirectProjection_to_params(params, RSDPower, parameter =parameter_ind, kmin=kmin, kmax=kmax)
-    
+        DirectProjection_to_params_shotnoise(params, RSDPower, kmin = kmin, kmax = kmax, lmax =lmax )
+        
     SNR = params['SNR']
     if SNR : 
         print 'calculating SNR...'
@@ -152,6 +162,18 @@ def derivative_Xi_datavector(params, RSDPower):
 
     RSDPower.derivative_Xi_band_all()
     Xizeros = np.zeros((RSDPower.dxip0.shape))
+    
+    print 'RSDPower.dxip0 shape', Xizeros.shape
+    
+    last_new0 = -1*np.sum(RSDPower.dxip0[:-1,:], axis = 0)
+    RSDPower.dxip0[-1,:] = last_new0
+    
+    last_new2 = -1*np.sum(RSDPower.dxip2[:-1,:], axis = 0)
+    RSDPower.dxip2[-1,:] = last_new2
+    
+    last_new4 = -1*np.sum(RSDPower.dxip4[:-1,:], axis = 0)
+    RSDPower.dxip4[-1,:] = last_new4
+    
     derivative_correl_avg = np.concatenate(( np.concatenate((RSDPower.dxip0,Xizeros,Xizeros), axis=1),\
                                             np.concatenate((Xizeros,RSDPower.dxip2,Xizeros), axis=1),\
                                             np.concatenate((Xizeros,Xizeros,RSDPower.dxip4), axis=1)),axis=0 )
@@ -172,7 +194,7 @@ def params_datavector(params, RSDPower):
     RSDPower.derivative_P_bfs_all()
 
     # add shot noise params
-    dPN0 = np.ones(RSDPower.kcenter_y.size)
+    dPN0 = np.ones(RSDPower.kcenter_y.size) 
     dPN1 = np.zeros(RSDPower.kcenter_y.size)
     dPN2 = dPN1.copy()
 
@@ -401,11 +423,13 @@ def BandpowerFisher(params, RSDPower, kmin = 0, kmax = 2, lmax=4):
     #print 'covariance matrix size', covPP_masked.shape, covXi.shape, covPXi.shape 
     
     
-    C_tot = np.concatenate((np.concatenate((covPP_masked, covPXi), axis=1),
-                            np.concatenate((covPXi.T, covXi), axis=1)), axis = 0)
+    #C_tot = np.concatenate((np.concatenate((covPP_masked, covPXi), axis=1),
+    #                        np.concatenate((covPXi.T, covXi), axis=1)), axis = 0)
 
     datav_P = masking_datav(RSDPower, np.genfromtxt(params['derivative_P_filename']), kmin = kmin, kmax = kmax, lmax=lmax)
     datav_Xi = masking_datav(RSDPower, np.genfromtxt(params['derivative_Xi_filename']), xi=True, lmax=lmax)
+    
+
     
     datav = np.concatenate((datav_P,datav_Xi), axis=1)    
     # inverting matrices
@@ -426,7 +450,8 @@ def BandpowerFisher(params, RSDPower, kmin = 0, kmax = 2, lmax=4):
                         covPP[:cut, cut:2*cut], covPP[cut:2*cut, cut:2*cut], covPP[cut:2*cut, 2*cut:], 
                         covPP[:cut, 2*cut:], covPP[cut:2*cut, 2*cut:], covPP[2*cut:, 2*cut:]]
             FisherP = masking(RSDPower, DiagonalBlockwiseInversion3x3(*tuple(covPPlist)), kmin=kmin, kmax=kmax, lmax=lmax)
-
+            #FisherP = pinv( covPP_masked, rcond=1e-30)
+            #print 'Diagonal blockwise inversion not used'
             #FisherBand_P = FisherProjection_Fishergiven(datav_P, FisherP)
             #FisherBand_P = np.dot(np.dot(datav_P, FisherP), datav_P.T)
             
@@ -451,48 +476,28 @@ def BandpowerFisher(params, RSDPower, kmin = 0, kmax = 2, lmax=4):
         
     if 'fisher_bandpower_tot_filename' not in params:    
     
-        print 'calculating Fisher tot'
-        # blockwise inversion
-        #from numpy.linalg import pinv
-        
-        """
-        FisherP = np.genfromtxt(params['fisher_bandpower_P_filename'])
+        print 'calculating Fisher tot, Blockwise Inversion'
         
         b = covPXi
-        c = covPXi.T 
+        c = covPXi.T #matrix[cutInd+1:, 0:cutInd+1]
         d = covXi
-        ia = FisherP
-        
-        import time
-        t1 = time.time()
-        Fd = pinv( d - np.dot( np.dot( c, ia ), b), rcond=1e-30)
-        #Fc = - np.dot( np.dot( Fd, c), ia)
+        ia = masking(RSDPower, FisherP, kmin=kmin, kmax=kmax)
+
+        Fd = pinv( d - np.dot( np.dot( c, ia ), b) )
+        Fc = - np.dot( np.dot( Fd, c), ia)
         Fb = - np.dot( np.dot( ia, b ), Fd )
-        #Fc = Fb.T
         Fa = ia + np.dot( np.dot (np.dot( np.dot( ia, b), Fd ), c), ia)
-        
-        #Fa = masking(RSDPower, Fa, kmin=kmin, kmax=kmax, lmax=lmax)
-        #Fb = masking(RSDPower, Fb, kmin=kmin, kmax=kmax, lmax=lmax)
-        Fc = Fb.T
-        #Fd = masking(RSDPower, Fd, xi=True, lmax=lmax)
-        print time.time()-t1
+
         Fisher3_tot = np.vstack(( np.hstack(( Fa, Fb )), np.hstack(( Fc, Fd )) ))
-        """
+        print 'Fisher3_tot diagonal test', np.sum(Fisher3_tot.diagonal() <0)
         
-        Fisher3_tot = pinv(C_tot, rcond = 1e-30)
-        """
-        rcondnum = np.arange(30, 13, -1)
-        for rc in rcondnum:
-            Fisher3_tot = pinv(C_tot, rcond = 10**(-1*rc))
-            neg = np.sum(Fisher3_tot.diagonal() <=0.0)
-            print rc, neg
-            if neg == 0 : break
-        if rc == 13 : raise ValueError("Inversion failed : rcond exceeds 1e-15")   
         
-        """
+        #Fisher3_tot = pinv(C_tot, rcond = 1e-30)
         
         #FisherBand_tot = np.dot( np.dot( datav, Fisher3_tot), datav.T)
         FisherBand_tot = FisherProjection_Fishergiven(datav, Fisher3_tot)
+        print 'FisherBand_tot diagonal test', np.sum(FisherBand_tot.diagonal() <0)
+        
         print np.sum(FisherBand_tot.diagonal() <= 0.0)
         f3 = 'data_txt/cov/'+params['name']+'_bandpower_tot.fisher'
         np.savetxt(f3, FisherBand_tot)
@@ -564,7 +569,7 @@ def DiagonalBlockwiseInversion3x3( mat1, mat2, mat3, mat4, mat5, mat6, mat7, mat
     
     return FF
 
-def DirectProjection_to_params(params, RSDPower, parameter =[0,1,2,3], kmin = 0, kmax = 2, lmax = 4, diffs = True):
+def DirectProjection_to_params(params, RSDPower, parameter =[0,1,2,3], kmin = 0, kmax = 2, lmax = 4, diffs = False):
     
     ## calling stored cov and datavector
     covPP = np.genfromtxt(params['covPP_filename'])
@@ -573,8 +578,8 @@ def DirectProjection_to_params(params, RSDPower, parameter =[0,1,2,3], kmin = 0,
     covPXi = masking(RSDPower, np.genfromtxt(params['covPXi_filename']), kmin = kmin, kmax = kmax, lmax=lmax)
     
     #covPP_masked = masking(RSDPower, covPP, kmin = kmin, kmax = kmax)
-    C_tot = np.concatenate((np.concatenate((covPP_masked, covPXi), axis=1),
-                            np.concatenate((covPXi.T, covXi), axis=1)), axis = 0)
+    #C_tot = np.concatenate((np.concatenate((covPP_masked, covPXi), axis=1),
+    #                        np.concatenate((covPXi.T, covXi), axis=1)), axis = 0)
     
     params_datav = np.genfromtxt(params['params_datavector_filename'])
     params_datav_mar = np.vstack(([ params_datav[p,:] for p in parameter] ))
@@ -621,8 +626,8 @@ def DirectProjection_to_params(params, RSDPower, parameter =[0,1,2,3], kmin = 0,
         
     if 'fishertot_filename' not in params:    
 
-        print 'calculating Fisher tot'
-        """
+        print 'calculating Fisher tot. Blockwise inversion'
+        
         b = covPXi
         c = covPXi.T #matrix[cutInd+1:, 0:cutInd+1]
         d = covXi
@@ -634,9 +639,9 @@ def DirectProjection_to_params(params, RSDPower, parameter =[0,1,2,3], kmin = 0,
         Fa = ia + np.dot( np.dot (np.dot( np.dot( ia, b), Fd ), c), ia)
 
         Fisher3_tot = np.vstack(( np.hstack(( Fa, Fb )), np.hstack(( Fc, Fd )) ))
-        """
         
-        Fisher3_tot = pinv(C_tot, rcond = 1e-30)
+        
+        #Fisher3_tot = pinv(C_tot, rcond = 1e-30)
         """
         rcondnum = np.arange(30, 13, -1)
         for rc in rcondnum:
@@ -655,11 +660,263 @@ def DirectProjection_to_params(params, RSDPower, parameter =[0,1,2,3], kmin = 0,
     DAT = np.column_stack((ind, F_params_P.ravel(), F_params_Xi.ravel(), F_params_tot.ravel() ))
     np.savetxt('data_txt/'+params['name']+'_fisher_params_direct.txt', DAT)
     print 'save to', 'data_txt/'+params['name']+'_fisher_params_direct.txt'
+    
+    
+    
+
+def DirectProjection_to_params_shotnoise(params, RSDPower, p_parameter =[0,1,2,3], xi_parameter =[0,1,2,3], kmin = 0, kmax = 2, lmax = 4, dinns = False):
+    
+    ## calling stored cov and datavector
+    covPP = np.genfromtxt(params['covPP_filename'])
+    covPP_masked = masking(RSDPower, covPP, kmin=kmin, kmax=kmax, lmax=lmax)
+    covXi = masking(RSDPower, np.genfromtxt(params['covXi_filename']), xi=True, lmax=lmax)
+    covPXi = masking(RSDPower, np.genfromtxt(params['covPXi_filename']), kmin = kmin, kmax = kmax, lmax=lmax)
+    
+    #covPP_masked = masking(RSDPower, covPP, kmin = kmin, kmax = kmax)
+    #C_tot = np.concatenate((np.concatenate((covPP_masked, covPXi), axis=1),
+    #                        np.concatenate((covPXi.T, covXi), axis=1)), axis = 0)
+    
+    params_datav = np.genfromtxt(params['params_datavector_filename'])
+    
+    params_datav_mar = np.vstack(([ params_datav[p,:] for p in p_parameter] ))
+    params_datav_mar_kcut = masking_datav(RSDPower, params_datav_mar, kmin=kmin, kmax=kmax, lmax=lmax)
+      
+    params_xi_datav = np.genfromtxt(params['params_xi_datavector_filename'])
+    params_xi_datav_mar = np.vstack(([ params_xi_datav[p,:] for p in xi_parameter] ))
+    params_xi_datav_mar = masking_datav(RSDPower, params_xi_datav_mar, xi=True, lmax=lmax)
+    params_xi_datav_mar[-1,:] = 0   
+    
+    
+    if dinns : 
+        dpnn = np.zeros(params_datav_mar_kcut.shape[1])
+        params_datav_mar_kcut = np.insert(params_datav_mar_kcut, 4, dpnn, axis=0 )
+        
+        dxinn = np.zeros(params_xi_datav_mar.shape[1])
+        params_xi_datav_mar = np.insert(params_xi_datav_mar, 3, dxinn, axis=0 )
+        
+        
+    print 'params_xi_datav_mar',  params_datav_mar_kcut.shape, params_xi_datav_mar.shape
+    datav = np.concatenate((params_datav_mar_kcut,params_xi_datav_mar), axis=1)
+    
+
+    # inverting matrices
+    from test_SNR import blockwiseInversion
+    
+    if 'fisher_bandpower_P_filename' not in params: 
+        
+        if lmax == 0 : 
+            FisherP = np.zeros(covPP_masked.shape) 
+            np.fill_diagonal(FisherP, 1./covPP_masked.diagonal())
+        elif lmax == 2 : raise ValueError('two modes not implemented yet')
+        elif lmax == 4 : 
+            
+            cut = RSDPower.kcenter_y.size
+            covPPlist = [covPP[:cut, :cut], covPP[:cut, cut:2*cut], covPP[:cut, 2*cut:],
+                        covPP[:cut, cut:2*cut], covPP[cut:2*cut, cut:2*cut], covPP[cut:2*cut, 2*cut:], 
+                        covPP[:cut, 2*cut:], covPP[cut:2*cut, 2*cut:], covPP[2*cut:, 2*cut:]]
+            FisherP = masking(RSDPower, DiagonalBlockwiseInversion3x3(*tuple(covPPlist)), kmin=kmin, kmax=kmax, lmax=lmax)
+       
+    else : FisherP = masking(RSDPower, np.genfromtxt(params['fisher_bandpower_P_filename']), kmin=kmin, kmax=kmax, lmax=lmax)
+                             
+    F_params_P = np.dot(np.dot(params_datav_mar_kcut, FisherP), params_datav_mar_kcut.T)
+    if dinns : F_params_P[4][4] = 1e-20
+    print 'F-params_p\n', F_params_P
+    
+    if 'fisherXi_filename' not in params: FisherXi = pinv(covXi, rcond=1e-30)
+    else : FisherXi = np.genfromtxt(params['fisherXi_filename'])
+    F_params_Xi = np.dot(np.dot(params_xi_datav_mar, FisherXi), params_xi_datav_mar.T)
+    F_params_Xi[-1,-1] = 1e-20   
+    if dinns : F_params_Xi[3][3] = 1e-20
+    print 'F_params_Xi\n', F_params_Xi
+    
+    if 'fishertot_filename' not in params:    
+        
+        print 'calculating Fisher tot, Blockwise Inversion'
+        
+        b = covPXi
+        c = covPXi.T #matrix[cutInd+1:, 0:cutInd+1]
+        d = covXi
+        ia = masking(RSDPower, FisherP, kmin=kmin, kmax=kmax)
+
+        Fd = pinv( d - np.dot( np.dot( c, ia ), b) )
+        Fc = - np.dot( np.dot( Fd, c), ia)
+        Fb = - np.dot( np.dot( ia, b ), Fd )
+        Fa = ia + np.dot( np.dot (np.dot( np.dot( ia, b), Fd ), c), ia)
+
+        Fisher3_tot = np.vstack(( np.hstack(( Fa, Fb )), np.hstack(( Fc, Fd )) ))
+        print 'Fisher3_tot diagonal test', np.sum(Fisher3_tot.diagonal() <0)
+        
+        
+        """
+        b = covPXi
+        c = covPXi.T #matrix[cutInd+1:, 0:cutInd+1]
+        d = covXi
+        ia = masking(RSDPower, FisherP, kmin=kmin, kmax=kmax)
+
+        Fd_sub = np.dot( np.dot( c, ia ), b)
+        Fd_sub2 = (Fd_sub + Fd_sub.T )/2.
+        
+        Fd = inv( d - Fd_sub2 )
+        Fc = np.dot( np.dot( -1*Fd, c), ia)
+        Fb = np.dot( np.dot( -1*ia, b ), Fd )
+        Fa = ia + np.dot( np.dot (np.dot( np.dot( ia, b), Fd ), c), ia)
+        
+        from numpy import linalg as LA
+        #check_defi = np.dot( np.dot( c, ia ), b)
+        
+        #print 'check result is identitiy: ', np.dot( check_defi, Fd )
+        
+        
+        check_identity = np.dot( d - Fd_sub2, Fd )
+        np.savetxt( 'check_identity.dat', check_identity)
+        
+        check_defi = np.dot( np.dot (np.dot( np.dot( ia, b), Fd ), c), ia)
+        np.savetxt( 'check_defi.dat', check_defi)
+        print 'save file to ', 'check_defi.dat'
+        
+        #print check_defi
+        
+        """
+        """
+        print 'checking deffinite or not', LA.cond( check_defi)
+        print 'checking deffinite or not', LA.cond( check_defi, -np.inf)
+        print 'checking deffinite or not', LA.cond( check_defi, np.inf)
+        print 'checking deffinite or not', LA.cond( check_defi, 'fro')
+        print 'checking deffinite or not', LA.cond( check_defi, 1)
+        print 'checking deffinite or not', LA.cond( check_defi, -1)
+        """
+        """
+        #for i in range(10000):
+        #    print Fd.diagonal()[i]
+        
+        a = covPP_masked
+        b = covPXi
+        c = covPXi.T
+        id = inv(covXi)
+        
+        
+        Fa_sub = np.dot( np.dot( b, id ), c)
+        Fa_sub2 = (Fa_sub + Fa_sub.T )/2.
+        
+        Fa = inv( a - Fa_sub2 )
+        
+        check_defi_a = a - Fa_sub2
+        check_identity_Fa = np.dot( check_defi_a, Fa )
+        print 'check result is identitiy'
+        np.savetxt( 'check_identity_Fa.dat', check_identity_Fa)
+        
+        
+        #Fa = inv( a - np.dot( np.dot( b, id ), c))
+        
+        Fb = np.dot(np.dot( -1*Fa, b ), id )
+        Fc = np.dot(np.dot( -1*id, c ), Fa )
+        
+        
+        Fd_sub = np.dot( np.dot (np.dot( np.dot( id, c), Fa ), b), id)
+        #Fd_sub2 = (Fd_sub + Fd_sub.T)/2.
+        Fd = id + Fd_sub # np.dot( np.dot (np.dot( np.dot( id, c), Fa ), b), id)
+        
+        #print 'Fd\n', Fd[:4, :4]
+        #print 'id\n', id[:4, :4]
+        
+        
+        Fisher3_tot = np.vstack(( np.hstack(( Fa, Fb )), np.hstack(( Fc, Fd )) ))
+        #print'negative diagonal component check Fa : ', np.sum( Fa.diagonal() < 0 )
+        #print'negative diagonal component check Fd : ', np.sum( Fd.diagonal() < 0 )
+
+        #print'negative diagonal component check value a : ', Fa.diagonal()[( Fa.diagonal() < 0 )]
+        #print'negative diagonal component check value a : ', Fa.diagonal()[( Fa.diagonal() > 0 )]
+        
+        #print'negative diagonal component check ia : ', np.sum( ia.diagonal() < 0 )
+        #print'negative diagonal component check  d : ', np.sum( d.diagonal() < 0 )
+        """
+        
+        """
+        
+        Faa = np.dot( np.dot(params_datav_mar_kcut, Fa),params_datav_mar_kcut.T)
+        Fbb = np.dot( np.dot(params_datav_mar_kcut, Fb),params_xi_datav_mar.T)
+        Fcc = np.dot( np.dot(params_xi_datav_mar, Fc),params_datav_mar_kcut.T)
+        Fdd = np.dot( np.dot(params_xi_datav_mar, Fd),params_xi_datav_mar.T)
+         
+        print Faa,'\n'
+        print Fbb, '\n'
+        print Fcc, '\n'
+        print Fdd, '\n'
+        
+        F_params_tot = Faa + Fbb + Fcc + Fdd
+        """
+        
+        
+        Fisher3_tot2 = pinv(C_tot, rcond = 1e-30)
+        print 'fisher mat diangonal test', np.sum(Fisher3_tot2.diagonal() < 0)
+        #for i in range(Fisher3_tot.shape[0]):
+        #    for j in range(i, Fisher3_tot.shape[0]):
+        #        Fisher3_tot[j,i] = Fisher3_tot[i,j]
+        #Fisher3_tot = inv(C_tot)
+      
+    
+    length_p = FisherP.shape[0]
+    F_pp = Fisher3_tot[:length_p, :length_p]
+    F_pxi = Fisher3_tot[length_p:, :length_p]
+    F_xi = Fisher3_tot[length_p:, length_p:]
+
+    params_xi_datav_mar2 = params_xi_datav_mar[:-1,:]
+    
+    Fqa = np.dot( np.dot( params_datav_mar_kcut, F_pp), params_datav_mar_kcut.T)
+    Fqb = np.dot( np.dot( params_xi_datav_mar2, F_pxi), params_datav_mar_kcut.T)
+    Fqd = np.dot( np.dot( params_xi_datav_mar2, F_xi), params_xi_datav_mar2.T)
+    
+    Fq = np.vstack(( np.hstack(( Fqa, Fqb.T )), np.hstack(( Fqb, Fqd )) ))
+    
+    truth = np.ones(7)
+    #np.array([RSDPower.b, RSDPower.f, RSDPower.s, RSDPower.nn, RSDPower.b, RSDPower.f, RSDPower.s])
+    chisquare = np.dot(np.dot( truth, Fq), truth )
+    print 'chisquare 1 (before projec) ', chisquare
+    
+    
+    print Fq
+    
+    for i in range(7):
+        print Fq[i,:]
+    
+    
+    datav_q = np.zeros((4,7))
+    datav_q[0][0] = 1.
+    datav_q[1][1] = 1.
+    datav_q[2][2] = 1.
+    datav_q[3][3] = 1.
+    datav_q[0][4] = 1.
+    datav_q[1][5] = 1.
+    datav_q[2][6] = 1.   
+    
+    #F_params_tot_q = np.dot( np.dot( datav_q, Fq ), datav_q.T)
+    F_params_tot_q = FisherProjection_Fishergiven(datav_q, Fq)
+    
+    truth2 = np.ones(4)#np.array([RSDPower.b, RSDPower.f, RSDPower.s, RSDPower.nn])
+    chisquare2 = np.dot(np.dot( truth2, F_params_tot_q), truth2 )
+    print 'chisquare 2 (after proj X)', chisquare2
+    
+    #else : Fisher3_tot = np.genfromtxt(params['fishertot_filename'])
+    #else : Fisher3_tot = np.dot(np.dot(datav, Fisher3_tot),datav.T)    
+    #F_params_tot = np.dot(np.dot(datav,Fisher3_tot), datav.T)
+    F_params_tot = FisherProjection_Fishergiven(datav, Fisher3_tot)
+    print 'F_params_tot\n', F_params_tot
+    print 'F_params_tot_q\n', F_params_tot_q
+    
+    print 'chisquare 3 (direct proj)', np.dot(np.dot( truth2, F_params_tot), truth2 )
+    print F_params_P.shape, F_params_Xi.shape, F_params_tot_q.shape, F_params_tot.shape
+
+    ind = np.arange(0,(len(p_parameter))**2)
+    if dinns == True : ind = np.arange(0,(len(p_parameter)+1)**2)
+    DAT = np.column_stack((ind, F_params_P.ravel(), F_params_Xi.ravel(), F_params_tot_q.ravel(), F_params_tot.ravel() ))
+    np.savetxt('data_txt/'+params['name']+'_fisher_params_nn.txt', DAT)
+    print 'save to', 'data_txt/'+params['name']+'_fisher_params_nn.txt'
+
+
     ##### end #########################################
 
 
-   
-    
+
 def CumulativeSNR(params, RSDPower, kmin=0, kmax=2, lmax=4):
     
     
@@ -790,7 +1047,10 @@ def Fisher_params(params, RSDPower, parameter = [0,1,2,3], kmin=0, kmax=2, lmax=
     F_params_P = np.dot( np.dot( params_datav_mar_kcut, Fisher_P), params_datav_mar_kcut.T)
     F_params_Xi = np.dot( np.dot( params_datav_mar, Fisher_Xi), params_datav_mar.T )
     F_params_tot = np.dot( np.dot( params_datav_mar, Fisher_tot), params_datav_mar.T )
-          
+    
+    print 'Fisher_params diagonal check',
+    print np.sum(F_params_P.diagonal() < 0), np.sum(F_params_Xi.diagonal() < 0), np.sum(F_params_tot.diagonal() < 0)
+    
     ind = np.arange(0,len(parameter)**2)
     DAT = np.column_stack((ind, F_params_P.ravel(), F_params_Xi.ravel(), F_params_tot.ravel() ))
     np.savetxt('data_txt/'+params['name']+'_fisher_params.txt', DAT)

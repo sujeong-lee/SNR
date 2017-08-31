@@ -8,64 +8,6 @@ import sys
 import matplotlib.pyplot as plt
 
 
-def InitialCondi():
-
-    Vs= 5.0*10**9
-    nn= 3.0 * 10**(-4)
-    
-    KMIN = 0.001
-    KMAX = 2. #502.32
-    RMIN = .1
-    RMAX = 200.
-    
-    # the number of k sample point should be 2^n+1 (b/c romb integration)
-    #kN = 2**10 + 1
-    kN= 2**11 + 1
-    rN = 101
-    subN = 2**15 + 1
-    rsubN = 2**10 + 1
-    Nmu = 2**4 + 1
-    # bin
-    
-    b=2.0
-    f=0.74
-    s=3.5
-    
-    
-    mulist, dmu = np.linspace(-1.,1., Nmu, retstep = True)
-    
-    kbin, dk = np.linspace(KMIN, KMAX, kN, retstep = True)
-    kmin = np.delete(kbin,-1)
-    kmax = np.delete(kbin,0)
-    kcenter = kmin + dk/2.
-    skbin, sdk = np.linspace( KMIN, KMAX, subN, retstep = True )
-    
-    rbin, dr = np.linspace(RMAX, RMIN, rN, retstep = True)
-    dr = np.fabs(dr)
-    rmin = np.delete(rbin,0)
-    rmax = np.delete(rbin,-1)
-    rcenter = rmin + dr/2.
-    srbin = np.linspace( RMAX, RMIN, rsubN )
-    
-    file ='matterpower_z_0.55.dat'
-    fo = open(file, 'r')
-    position = fo.seek(0, 0)
-    Pkl=np.array(np.loadtxt(fo))
-    k=np.array(Pkl[:,0])
-    P=np.array(Pkl[:,1])
-    
-    print k.size
-    print k[1] - k[0]
-    Pm = interp1d(k, P, kind= "cubic")
-    #self.Pmlist = Pm(self.kcenter)
-    
-    #REAL POWERSPECTRUM DATA
-    PS = np.array([Pm(sk) for sk in skbin])
-    fo.close()
-
-    return Vs, nn, b, f, s, kN, rN, subN, Nmu, KMIN, KMAX, RMIN, RMAX, mulist, dmu, kbin, dk, kmin, kmax, kcenter, skbin, sdk, rbin, dr, rmin, rmax, rcenter, srbin, PS
-
-
 def Pmultipole(l, binavg = True):
     """
     Vs= 5.0*10**9
@@ -213,7 +155,7 @@ def Covariance_PP(l1, l2, binavg = True):
 
 
 
-def derivative_Xi(l):
+def _derivative_Xi(l):
 
     import numpy as np
     from numpy import pi
@@ -244,7 +186,7 @@ def derivative_Xi(l):
 
 
 
-def covariance_Xi(l1, l2):
+def _covariance_Xi(l1, l2):
     from numpy import pi, real
     from scipy.integrate import simps
     import cmath
@@ -347,7 +289,7 @@ def Ll(l,x):
     return result
 
 
-def avgBessel(l,k,rmin,rmax):
+def _avgBessel(l,k,rmin,rmax):
     
     """ 
     Calculate Averaged spherical Bessel function J_l (kr) in configuration space in each bin
@@ -364,6 +306,7 @@ def avgBessel(l,k,rmin,rmax):
     from numpy import vectorize, pi, cos, sin
     from fortranfunction import sici
     sici = vectorize(sici)
+
     
     if l == 0 :
         result = 4. * pi * (-k * rmax * cos(k * rmax) + k * rmin * cos(k * rmin) + sin(k * rmax) - sin(k * rmin))/(k**3)
@@ -540,16 +483,16 @@ def avgBessel(l,k,rmin,rmax):
 class NoShell_covariance():
 
 
-    def __init__(self, KMIN, KMAX, RMIN, RMAX, n, n2, N_x, N_y, logscale = False):
+    def __init__(self, KMIN, KMAX, RMIN, RMAX, n, n2, N_x, N_y, b, f, s, nn, logscale = False):
         
         # const
         self.h= 1.0
         self.Vs= 5.0*10**9
-        self.nn= 3.0 * 10**(-4)
+        self.nn= nn
         
-        self.b=2.0
-        self.f=0.74
-        self.s= 3.5
+        self.b= b
+        self.f= f 
+        self.s= s
         self.n3 = 2**4 + 1
         self.mulist, self.dmu = np.linspace(-1.,1., self.n3, retstep = True)
         
@@ -816,7 +759,7 @@ class NoShell_covariance():
             q.put((order, self.covariance_PP(l1, l2)))
             #sys.stdout.write('.')
         
-        inputs = ((0,0),(0,2), (0,4),(2,2), (2,4), (4,4))
+        inputs = ((0,0), (0,2), (0,4), (2,2), (2,4), (4,4))
         d_queue = Queue()
         d_processes = [Process(target=RSDband_covariance_PP_process, args=(d_queue, z[0], z[1])) for z in zip(range(6), inputs)]
         for p in d_processes:
@@ -1290,10 +1233,9 @@ class NoShell_covariance():
         nn = self.nn
         dmu = self.dmu
 
-        Const_beta = np.real(I**(l1)) * (2*l1 + 1.) * (2*l2 + 1.)/Vs
-        
+        Const_beta = np.real(I**(l2)) * (2*l1 + 1.) * (2*l2 + 1.)/Vs
         matrix1, matrix2 = np.mgrid[0:len(mulist), 0: len(kcenter)]
-        kmatrix = klist[matrix2]
+        kmatrix = kcenter[matrix2]
         mumatrix = mulist[matrix1]
         Le_matrix1 = Ll(l1,mulist)[matrix1]
         Le_matrix2 = Ll(l2,mulist)[matrix1]
@@ -1310,9 +1252,9 @@ class NoShell_covariance():
         rmaxmatrix = rmax[matrix2]
         rmatrix = rcenter[matrix2]
         Vir = 4/3. * pi * ( rmaxmatrix**3 - rminmatrix**3)
-        Vik = 4/3. * pi * ( kmaxmatrix**3 - kminmatrix**3)
-        #AvgBesselmatrix = avgBessel(l2,kmatrix,rminmatrix,rmaxmatrix)/Vir
-        AvgBesselmatrix = avgBessel(l2,rmatrix,kminmatrix,kmaxmatrix)/Vik
+        #Vik = 4/3. * pi * ( kmaxmatrix**3 - kminmatrix**3)
+        AvgBesselmatrix = avgBessel(l2,kmatrix,rminmatrix,rmaxmatrix)/Vir
+        #AvgBesselmatrix = avgBessel(l2,rmatrix,kminmatrix,kmaxmatrix) #/Vik
         #AvgBesselmatrix = sbess(l2, kmatrix * rmatrix)
         Rintegral3 = Rintegral3[matrix1]
         Rintegral2 = Rintegral2[matrix1]
@@ -1323,9 +1265,9 @@ class NoShell_covariance():
         
         if l1 == l2 :
             LastTerm = np.real(I**(l2)) * (2*l2 + 1.)*2 /Vs/nn**2 * AvgBesselmatrix.reshape((len(kcenter), len(rcenter)))
-        else : LastTerm = 0.
+        else : LastTerm = np.zeros((len(kcenter), len(rcenter)))
         
-        covariance_multipole_PXi =  FirstTerm + LastTerm
+        covariance_multipole_PXi = FirstTerm + LastTerm
     
         #print 'covariance_PXi {:>1.0f}{:>1.0f} is finished'.format(l1,l2)
         return covariance_multipole_PXi
