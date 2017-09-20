@@ -3,10 +3,10 @@ from numpy import zeros, sqrt, pi, sin, cos, exp
 from numpy.linalg import pinv as inv
 from numpy import vectorize
 from scipy.interpolate import interp1d
-from scipy.integrate import simps, romb
+#from scipy.integrate import simps
 import sys
 import matplotlib.pyplot as plt
-
+from scipy_integrate import *
 
 def Pmultipole(l, binavg = True):
     """
@@ -90,7 +90,7 @@ def Pmultipole(l, binavg = True):
 
 
 
-def Covariance_PP(l1, l2, binavg = True):
+def _Covariance_PP(l1, l2, binavg = True):
 
     Vs, nn, b, f, s, kN, rN, subN, Nmu, KMIN, KMAX, RMIN, RMAX, mulist, dmu, kbin, dk, kmin, kmax, kcenter, skbin, sdk, rbin, dr, rmin, rmax, rcenter, srbin, PS = InitialCondi()
 
@@ -488,7 +488,7 @@ class NoShell_covariance():
         # const
         self.h= 1.0
         self.Vs= 5.0*10**9
-        self.nn= nn
+        self.nn= nn # for shot noise. fiducial : 3x1e-04
         
         self.b= b
         self.f= f 
@@ -505,10 +505,10 @@ class NoShell_covariance():
         self.RMAX = RMAX
         
         
-        self.n = n
-        self.n2 = n2
+        self.n = n #kN
+        self.n2 = n2 #rN
         #self.N_x = N_x
-        self.N_y = N_y
+        self.N_y = N_y #kN_y
     
         # evenly spaced bins -------------------------
         
@@ -572,17 +572,6 @@ class NoShell_covariance():
             self.dk_y = self.kmax_y - self.kmin_y
             self.dlnk_y = np.log(self.kbin_y[3]/self.kbin_y[2])
         
-        InitiateTitle = '-------------------------------------------------------------------\
-        \nclass error_analysis, no RSD \
-        \nz = 0.0, kN ={}, N_y = {}, rN = {}'.format(self.n, self.N_y, self.n2)
-    
-        print InitiateTitle
-        
-        if logscale is True:
-            print 'dlnr = {}, dlnk={}'.format(self.dlnr ,self.dlnk_y)
-        elif logscale is False:
-            print 'dr = {}, dk={}, dk_y={}'.format(self.dr, self.dk, self.dk_y)
-
 
     def compile_fortran_modules(self):
         """
@@ -652,6 +641,7 @@ class NoShell_covariance():
 
         kcenter = self.kcenter_y
         mulist = self.mulist
+        dmu = self.dmu
         PS = self.RealPowerBand_y
         
         matrix1, matrix2 = np.mgrid[0:mulist.size,0:kcenter.size]
@@ -660,8 +650,9 @@ class NoShell_covariance():
         
         kmatrix = kcenter[matrix2]
         Dmatrix = np.exp(- kmatrix**2 * mumatrix**2 * self.s**2) #FOG matrix
+        if self.s == 0: Dmatrix = 1.
         R = (b + f * mumatrix**2)**2 * Dmatrix * Le_matrix
-        muint = (2 * l + 1.)/2 * PS * simps( R, mulist, axis=0 )
+        muint = (2 * l + 1.)/2 * PS * romberg( R, dx=dmu, axis=0 )
 
         return muint
 
@@ -688,11 +679,11 @@ class NoShell_covariance():
         self.multipole_bandpower2 = result1[1]
         self.multipole_bandpower4 = result1[2]
         
-            
+           
             
     def covariance_PP(self, l1, l2):
 
-        from scipy.integrate import quad,simps
+        #from scipy.integrate import simps, romb
         from numpy import zeros, sqrt, pi, exp
         import cmath
         I = cmath.sqrt(-1)
@@ -721,16 +712,20 @@ class NoShell_covariance():
         Le_matrix1 = Ll(l1,mumatrix)
         Le_matrix2 = Ll(l2,mumatrix)
         #Vi = 4 * pi * kcenter**2 * dk + 1./3 * pi * (dk)**3
-        Vi = 4./3 * pi * ( self.kmax_y**3 - self.kmin_y**3 )
+        Vi = 4./3 * pi * ( self.kmax_y**3 - self.kmin_y**3 ) #4*np.pi*kcenter**2
+        
         Const_alpha = (2*l1 + 1.) * (2*l2 + 1.) * (2*pi)**3 /Vs
         
         kmatrix = kcenter[matrix2]
         Pmmatrix = PS[matrix2]
         Dmatrix = np.exp(- kmatrix**2 * mumatrix**2 * self.s**2) #FOG matrix
+        if self.s == 0 : Dmatrix = 1.
         R = (b + f * mumatrix**2)**2 * Dmatrix
-        Rintegral3 = Const_alpha * PS**2 * simps( R**2 * Le_matrix1 * Le_matrix2, dx = dmu, axis=0 )/Vi
-        Rintegral2 = Const_alpha * 2./nn * PS * simps( R * Le_matrix1 * Le_matrix2, dx = dmu, axis=0 )/Vi
         
+        Rintegral3 = Const_alpha * PS**2 * romberg( R**2 * Le_matrix1 * Le_matrix2, dx=dmu, axis=0 )/Vi
+        Rintegral2 = Const_alpha * 2./nn * PS * romberg( R * Le_matrix1 * Le_matrix2, dx=dmu, axis=0 )/Vi
+     
+
         FirstSecond = Rintegral3 + Rintegral2
 
         
@@ -738,9 +733,10 @@ class NoShell_covariance():
         if l1 == l2:
             LastTerm = (2*l1 + 1.) * 2. * (2 * pi)**3/Vs/nn**2 /Vi
         else:
-            LastTerm = 0.
+            LastTerm = np.zeros(FirstSecond.shape)
         
         Total = FirstSecond + LastTerm
+        #Total = LastTerm
         covariance_mutipole_PP = np.zeros((kcenter.size,kcenter.size))
         np.fill_diagonal(covariance_mutipole_PP,Total)
 
@@ -907,6 +903,7 @@ class NoShell_covariance():
         mulist = self.mulist
         dk = self.dk
         dr = self.dr
+        dmu = self.dmu
         #Pmlist = self.Pmlist
         Pm = self.RealPowerBand
         s = self.s
@@ -922,13 +919,14 @@ class NoShell_covariance():
         #Pmmatrix = Pm[matrix2]
         const =  np.real(I**l) * (2 * l + 1)/2. / (2 * np.pi**2)
         Dmatrix = np.exp(-kmatrix**2 * mumatrix**2 * self.s**2)
+        if self.s == 0 : Dmatrix = 1.
         db =  const* (b + f* mumatrix**2)*2 * Le_matrix *Dmatrix
         df =  const* (b + f*mumatrix**2)*2 * mumatrix**2 * Le_matrix * Dmatrix
         ds =  const* (b + f*mumatrix**2)**2 * (-kmatrix**2 * mumatrix**2) * Le_matrix * Dmatrix
         # mu integration
-        muintb = simps(db ,mumatrix, axis=0) # return 1d array along k-axis
-        muintf = simps(df ,mumatrix, axis=0) # return 1d array along k-axis
-        muints = simps(ds ,mumatrix, axis=0) # return 1d array along k-axis
+        muintb = romberg(db ,dx=dmu, axis=0) # return 1d array along k-axis
+        muintf = romberg(df ,dx=dmu, axis=0) # return 1d array along k-axis
+        muints = romberg(ds ,dx=dmu, axis=0) # return 1d array along k-axis
     
         matrix1,matrix2 = np.mgrid[0:len(kcenter),0:len(rcenter)]
         kmatrix = kcenter[matrix1]
@@ -947,9 +945,9 @@ class NoShell_covariance():
         #AvgBessel = np.array([ avgBessel(l, k ,rmin, rmax) for k in kcenter ])/Vir
         #AvgBessel = avgBessel(l, kmatrix, rminmatrix, rmaxmatrix )
         AvgBessel = sbess(l, kmatrix * rmatrix)
-        Total_Integb = simps(kmatrix**2 * Pmmatrix * intb * AvgBessel, kcenter, axis=0)#/Vir
-        Total_Integf = simps(kmatrix**2 * Pmmatrix * intf * AvgBessel, kcenter, axis=0)#/Vir
-        Total_Integs = simps(kmatrix**2 * Pmmatrix * ints * AvgBessel, kcenter, axis=0)#/Vir
+        Total_Integb = romberg(kmatrix**2 * Pmmatrix * intb * AvgBessel, dx=dk, axis=0)#/Vir
+        Total_Integf = romberg(kmatrix**2 * Pmmatrix * intf * AvgBessel, dx=dk, axis=0)#/Vir
+        Total_Integs = romberg(kmatrix**2 * Pmmatrix * ints * AvgBessel, dx=dk, axis=0)#/Vir
     
         #sys.stdout.write('.')
         
@@ -973,8 +971,8 @@ class NoShell_covariance():
         * need multiprocessing module
         
         """
-        from fortranfunction import sbess
-        sbess = np.vectorize(sbess)    
+        #from fortranfunction import sbess
+        #sbess = np.vectorize(sbess)    
 
         kcenter = self.kcenter
         rbin = self.rbin
@@ -983,6 +981,7 @@ class NoShell_covariance():
         rmin = self.rmin
         rmax = self.rmax
         mulist = self.mulist
+        dmu = self.dmu
         dk = self.dk
         dr = self.dr
         Pm = self.RealPowerBand
@@ -1001,7 +1000,9 @@ class NoShell_covariance():
         Le_matrix2 = Ll(2,mulistmatrix)
         Le_matrix4 = Ll(4,mulistmatrix)
     
+        
         Dmatrix = np.exp(-klistmatrix**2 * mulistmatrix**2 * self.s**2)
+        if self.s == 0 : Dmatrix = 1.
         R = (b + f * mulistmatrix**2)**2 * Dmatrix
 
         from multiprocessing import Process, Queue
@@ -1011,14 +1012,14 @@ class NoShell_covariance():
             
             #import covariance_class2
             from numpy import pi, real
-            from scipy.integrate import simps
+            #from scipy.integrate import simps
             import cmath
             
             I = cmath.sqrt(-1)
             const_gamma = real(I**(l1+l2)) * 2.* (2*l1+1)*(2*l2+1) /(2*pi)**2 /Vs
-            muint3 = simps(R**2 * Le1 * Le2, mulist, axis=0 )
-            muint2 = simps(R * Le1 * Le2, mulist, axis=0 )
-            result = const_gamma * (muint3 * Pm**2 + muint2 * Pm * 2./self.nn)
+            muint3 = romberg(R**2 * Le1 * Le2, dx=dmu, axis=0 )
+            muint2 = romberg(R * Le1 * Le2, dx=dmu, axis=0 )
+            result = const_gamma * (muint3 * Pm**2 + muint2 * Pm * 2./nn)
             #sys.stdout.write('.')
             
             q.put((order,result))
@@ -1121,20 +1122,22 @@ class NoShell_covariance():
             relist = []
             for i in range(len(rcenter)/2):
                 avgBmatrix = np.array(avgBessel1[:, i])[matrix1]
-                re = simps(Rint_result * avgBmatrix * avgBessel2 * kmatrix**2, kcenter, axis=0)
+                re = simpson(Rint_result * avgBmatrix * avgBessel2 * kmatrix**2, dx=dk, axis=0)
                 #re = np.sum(Rint_result * Vik/(4*pi) * avgBmatrix * avgBessel2, axis=0)
                 #re = np.sum(Rint_result * dk * kmatrix**2 * avgBmatrix * avgBessel2, axis=0)
                 relist.append(re)
             FirstTerm = np.array(relist)  / Volume_double[0:len(rcenter)/2,:] #2D
+            
+            LastTermmatrix = np.zeros((len(rcenter),len(rcenter)))
             if l1 == l2:
-                Last = (2./Vs) * (2*l1+1)/nn**2 / Vi #1d array
-                LastTermmatrix = np.zeros((len(rcenter),len(rcenter)))
+                Last = (2./Vs) * (2*l1+1)/nn**2 / Vi #1d array    
                 np.fill_diagonal(LastTermmatrix,Last)
                 LastTerm = LastTermmatrix[0:len(rcenter)/2,:]
-            else : LastTerm = 0.
+            else : LastTerm = LastTermmatrix[0:len(rcenter)/2,:]
             
         
             re = FirstTerm+LastTerm
+            #re = LastTerm
             queue.put((order,re))
             #sys.stdout.write('.')
 
@@ -1146,19 +1149,22 @@ class NoShell_covariance():
             relist = []
             for i in range(len(rcenter)/2, len(rcenter)):
                 avgBmatrix = np.array(avgBessel1[:, i])[matrix1]
-                re = simps(Rint_result * avgBmatrix * avgBessel2 * kmatrix**2, kcenter, axis=0)
+                
+                re = simpson(Rint_result * avgBmatrix * avgBessel2 * kmatrix**2, dx=dk, axis=0)
                 #re = np.sum(Rint_result * Vik/(4*pi)* avgBmatrix * avgBessel2, axis=0)
                 #re = np.sum(Rint_result * dk * kmatrix**2 * avgBmatrix * avgBessel2, axis=0)
                 relist.append(re)
             FirstTerm = np.array(relist)/ Volume_double[len(rcenter)/2:len(rcenter),:] #2D
+            
+            LastTermmatrix = np.zeros((len(rcenter),len(rcenter)))
             if l1 == l2:
                 Last = (2./Vs) * (2*l1+1)/nn**2 / Vi #1d array
-                LastTermmatrix = np.zeros((len(rcenter),len(rcenter)))
                 np.fill_diagonal(LastTermmatrix,Last)
                 LastTerm = LastTermmatrix[len(rcenter)/2:,:]
-            else : LastTerm = 0.0
+            else : LastTerm = LastTermmatrix[len(rcenter)/2:,:]
             
             re = FirstTerm+LastTerm
+            #re = LastTerm
             queue.put((order,re))
             #sys.stdout.write('.')
         
@@ -1201,7 +1207,7 @@ class NoShell_covariance():
         from numpy import zeros, sqrt, pi, sin, cos, exp
         from numpy.linalg import inv
         from numpy import vectorize
-        from scipy.integrate import simps, simps
+        #from scipy.integrate import simps, simps
         from fortranfunction import sbess
         sbess = np.vectorize(sbess)
         
@@ -1240,9 +1246,10 @@ class NoShell_covariance():
         Le_matrix1 = Ll(l1,mulist)[matrix1]
         Le_matrix2 = Ll(l2,mulist)[matrix1]
         Dmatrix = np.exp(- kmatrix**2 * mumatrix**2 * self.s**2) #FOG matrix
+        if self.s == 0 : Dmatrix = 1.
         R = (self.b + self.f * mumatrix**2)**2 * Dmatrix
-        Rintegral3 = simps( R**2 * Le_matrix1 * Le_matrix2, dx = dmu, axis= 0 )
-        Rintegral2 = simps( R * Le_matrix1 * Le_matrix2, dx = dmu, axis= 0 )
+        Rintegral3 = romberg( R**2 * Le_matrix1 * Le_matrix2, dx = dmu, axis= 0 )
+        Rintegral2 = romberg( R * Le_matrix1 * Le_matrix2, dx = dmu, axis= 0 )
         
         matrix1, matrix2 = np.mgrid[ 0:kcenter.size, 0: rcenter.size]
         kmatrix = kcenter[matrix1]
@@ -1268,7 +1275,8 @@ class NoShell_covariance():
         else : LastTerm = np.zeros((len(kcenter), len(rcenter)))
         
         covariance_multipole_PXi = FirstTerm + LastTerm
-    
+        #covariance_multipole_PXi = LastTerm
+        
         #print 'covariance_PXi {:>1.0f}{:>1.0f} is finished'.format(l1,l2)
         return covariance_multipole_PXi
 
@@ -1316,6 +1324,7 @@ class NoShell_covariance():
         #skbin = self.skbin
         #skcenter = self.skcenter
         #dk = self.dk
+        dmu = self.dmu
         mulist = self.mulist
         #dlnk = self.dlnk
         #Pmlist = self.Pmlist
@@ -1331,12 +1340,13 @@ class NoShell_covariance():
         Vi = 4./3 * pi * (self.kmax_y**3 - self.kmin_y**3)
         Pmmatrix = Pm[matrix2]
         Dmatrix = np.exp(- kmatrix**2 * mumatrix**2 * self.s**2) #FOG matrix
+        if self.s == 0:Dmatrix = 1.
         Rb = 2 *(self.b + self.f * mumatrix**2) * Dmatrix #* Le_matrix
         Rf = 2 * mumatrix**2 *(self.b + self.f * mumatrix**2) * Dmatrix #* Le_matrix
         Rs = (- kmatrix**2 * mumatrix**2)*(self.b + self.f * mumatrix**2)**2 * Dmatrix# * Le_matrix
-        Rintb = (2 * l + 1.)/2 * simps( Pmmatrix * Rb * Le_matrix, mumatrix, axis=0 )
-        Rintf = (2 * l + 1.)/2 * simps( Pmmatrix * Rf * Le_matrix, mumatrix, axis=0 )
-        Rints = (2 * l + 1.)/2 * simps( Pmmatrix * Rs * Le_matrix, mumatrix, axis=0 )
+        Rintb = (2 * l + 1.)/2 * romberg( Pmmatrix * Rb * Le_matrix, dx=dmu, axis=0 )
+        Rintf = (2 * l + 1.)/2 * romberg( Pmmatrix * Rf * Le_matrix, dx=dmu, axis=0 )
+        Rints = (2 * l + 1.)/2 * romberg( Pmmatrix * Rs * Le_matrix, dx=dmu, axis=0 )
 
         return Rintb, Rintf, Rints
     
