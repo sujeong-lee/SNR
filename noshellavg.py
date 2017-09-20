@@ -483,7 +483,7 @@ def avgBessel(l,k,rmin,rmax):
 class NoShell_covariance():
 
 
-    def __init__(self, KMIN, KMAX, RMIN, RMAX, n, n2, N_x, N_y, b, f, s, nn, logscale = False):
+    def __init__(self, KMIN, KMAX, RMIN, RMAX, n, n2, N_y, b, f, s, nn, logscale = False):
         
         # const
         self.h= 1.0
@@ -507,7 +507,6 @@ class NoShell_covariance():
         
         self.n = n #kN
         self.n2 = n2 #rN
-        #self.N_x = N_x
         self.N_y = N_y #kN_y
     
         # evenly spaced bins -------------------------
@@ -945,9 +944,9 @@ class NoShell_covariance():
         #AvgBessel = np.array([ avgBessel(l, k ,rmin, rmax) for k in kcenter ])/Vir
         #AvgBessel = avgBessel(l, kmatrix, rminmatrix, rmaxmatrix )
         AvgBessel = sbess(l, kmatrix * rmatrix)
-        Total_Integb = romberg(kmatrix**2 * Pmmatrix * intb * AvgBessel, dx=dk, axis=0)#/Vir
-        Total_Integf = romberg(kmatrix**2 * Pmmatrix * intf * AvgBessel, dx=dk, axis=0)#/Vir
-        Total_Integs = romberg(kmatrix**2 * Pmmatrix * ints * AvgBessel, dx=dk, axis=0)#/Vir
+        Total_Integb = simpson(kmatrix**2 * Pmmatrix * intb * AvgBessel, kmatrix, axis=0)#/Vir
+        Total_Integf = simpson(kmatrix**2 * Pmmatrix * intf * AvgBessel, kmatrix, axis=0)#/Vir
+        Total_Integs = simpson(kmatrix**2 * Pmmatrix * ints * AvgBessel, kmatrix, axis=0)#/Vir
     
         #sys.stdout.write('.')
         
@@ -1122,7 +1121,7 @@ class NoShell_covariance():
             relist = []
             for i in range(len(rcenter)/2):
                 avgBmatrix = np.array(avgBessel1[:, i])[matrix1]
-                re = simpson(Rint_result * avgBmatrix * avgBessel2 * kmatrix**2, dx=dk, axis=0)
+                re = simpson(Rint_result * avgBmatrix * avgBessel2 * kmatrix**2, kmatrix, axis=0)
                 #re = np.sum(Rint_result * Vik/(4*pi) * avgBmatrix * avgBessel2, axis=0)
                 #re = np.sum(Rint_result * dk * kmatrix**2 * avgBmatrix * avgBessel2, axis=0)
                 relist.append(re)
@@ -1150,7 +1149,7 @@ class NoShell_covariance():
             for i in range(len(rcenter)/2, len(rcenter)):
                 avgBmatrix = np.array(avgBessel1[:, i])[matrix1]
                 
-                re = simpson(Rint_result * avgBmatrix * avgBessel2 * kmatrix**2, dx=dk, axis=0)
+                re = simpson(Rint_result * avgBmatrix * avgBessel2 * kmatrix**2,kmatrix, axis=0)
                 #re = np.sum(Rint_result * Vik/(4*pi)* avgBmatrix * avgBessel2, axis=0)
                 #re = np.sum(Rint_result * dk * kmatrix**2 * avgBmatrix * avgBessel2, axis=0)
                 relist.append(re)

@@ -45,7 +45,7 @@ def run_error_analysis(params):
     print ' lmax={}'.format(lmax)
     print '-----------------------------------'
     
-    RSDPower = NoShell_covariance(KMIN, KMAX, rmin, rmax, 2**10 + 1, rN, 1, kN, b,f,s,nn,logscale = logscale)
+    RSDPower = NoShell_covariance(KMIN, KMAX, rmin, rmax, 2**10 + 1, rN, kN, b,f,s,nn,logscale = logscale)
     Covariance_matrix(params, RSDPower)
 
     #print RSDPower.kcenter_y[0]
