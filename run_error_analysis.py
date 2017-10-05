@@ -21,7 +21,7 @@ def run_error_analysis(params):
     kmin, kmax, kN = params['k']
     rmin, rmax, rN = params['r']
     logscale = params['logscale']
-    KMIN, KMAX = 1e-3, 100.
+    KMIN, KMAX = 1e-3, 2.
     lmax = params['lmax']
     parameter_ind = params['parameter_ind']  
     #parameter_ind_xi = params['parameter_ind_xi'] 
@@ -51,13 +51,12 @@ def run_error_analysis(params):
     
     Covariance_matrix(params, RSDPower)
 
-    print RSDPower.kcenter_y[0]
     np.savetxt('data_txt/kcenter.txt', RSDPower.kcenter_y)
     np.savetxt('data_txt/rcenter.txt', RSDPower.rcenter)
 
     
     if 'multipole_p_filename' not in params:
-        P_multipole(params, RSDPower)
+        P_multipole(RSDPower)
     else : print '\nUse Precalculated multipole_p ', params['multipole_p_filename']
         
     if 'derivative_P_filename' not in params:
@@ -154,7 +153,7 @@ def Covariance_matrix(params, RSDPower):
 
     ##### end #### -----------------------------------------------------------------------
     
-def P_multipole(params, RSDPower):
+def P_multipole(RSDPower):
 
     # power spectrum multipoles l = 0,2,4
     
@@ -165,10 +164,12 @@ def P_multipole(params, RSDPower):
     
     multipole_datav = np.hstack([RSDPower.multipole_bandpower0,RSDPower.multipole_bandpower2\
                              ,RSDPower.multipole_bandpower4])
-    np.savetxt('data_txt/datav/'+params['name']+'_multipole_p.datavector',multipole_datav )
-    params['multipole_p_filename'] = 'data_txt/datav/'+params['name']+'_multipole_p.datavector'
+    #np.savetxt('data_txt/datav/'+params['name']+'_multipole_p.datavector',multipole_datav )
+#    params['multipole_p_filename'] = 'data_txt/datav/'+params['name']+'_multipole_p.datavector'
+
+    return multipole_datav
     
-def Xi_multipole(params, RSDPower):
+def Xi_multipole(RSDPower):
 
     # power spectrum multipoles l = 0,2,4
     
@@ -179,8 +180,9 @@ def Xi_multipole(params, RSDPower):
     
     multipole_datav = np.hstack([RSDPower.multipole_xi0,RSDPower.multipole_xi2\
                              ,RSDPower.multipole_xi4])
-    np.savetxt('data_txt/datav/'+params['name']+'_multipole_xi.datavector',multipole_datav )
-    params['multipole_xi_filename'] = 'data_txt/datav/'+params['name']+'_multipole_xi.datavector'
+    #np.savetxt('data_txt/datav/'+params['name']+'_multipole_xi.datavector',multipole_datav )
+    #params['multipole_xi_filename'] = 'data_txt/datav/'+params['name']+'_multipole_xi.datavector'
+    return multipole_datav
     
     
 def derivative_P_datavector(params, RSDPower):    
@@ -272,7 +274,7 @@ def params_datavector(params, RSDPower):
     
 
 def params_xi_datavector(params, RSDPower):
-    
+    from fortranfunction import sbess
     #if 'params_datavector_filename' not in params:  
     # derivative dXidb, s, f, n
     RSDPower.derivative_bfs_all()
@@ -375,7 +377,8 @@ def masking_datav(RSDPower, data, kmin = 0, kmax = 2, lmax = 4, xi=False):
 
 
     
-def masking(RSDPower, data, kmin = 0, kmax = 100, lmax = 4, xi=False):
+def masking(RSDPower, data, kmin = 0, kmax = 2, lmax = 4, xi=False):
+    
     
     kcut_min = get_closest_index_in_data( kmin, RSDPower.kmin_y )   
     kcut_max = get_closest_index_in_data( kmax, RSDPower.kmax_y )
@@ -423,15 +426,15 @@ def masking(RSDPower, data, kmin = 0, kmax = 100, lmax = 4, xi=False):
     return data.reshape(nx, ny)
 
 
-def masking_datav(RSDPower, data, kmin = 0, kmax = 100, lmax = 4, xi=False):
+def masking_datav(RSDPower, data, kmin = 0, kmax = 2, lmax = 4, xi=False):
     
     kcut_min = get_closest_index_in_data( kmin, RSDPower.kmin_y )   
     kcut_max = get_closest_index_in_data( kmax, RSDPower.kmax_y )
     
     if xi : kcut_min, kcut_max = 0, RSDPower.rcenter.size
-        
+
     Nx, Ny = data.shape
-  
+
     mask2= np.zeros((Nx, Ny), dtype=bool)
     if lmax == 0: l = 1
     elif lmax == 2: l = 2
@@ -450,13 +453,13 @@ def masking_datav(RSDPower, data, kmin = 0, kmax = 100, lmax = 4, xi=False):
     return data.reshape(nx, ny)
 
 
-def generate_mask_datav(RSDPower, data, kmin = 0, kmax = 100, lmax = 4, xi=False):
+def generate_mask_datav(RSDPower, data, kmin = 0, kmax = 2, lmax = 4, xi=False):
     
     kcut_min = get_closest_index_in_data( kmin, RSDPower.kmin_y )   
     kcut_max = get_closest_index_in_data( kmax, RSDPower.kmax_y )
     
     if xi : kcut_min, kcut_max = 0, RSDPower.rcenter.size
-        
+    if len(data.shape) == 1 : data = data.reshape(1, data.size)    
     Nx, Ny = data.shape
   
     mask2= np.zeros((Nx, Ny), dtype=bool)
@@ -474,15 +477,16 @@ def generate_mask_datav(RSDPower, data, kmin = 0, kmax = 100, lmax = 4, xi=False
 
 
 
-def masking_paramsdatav(RSDPower, data, kmin = 0, kmax = 100, lmax = 4, xi=False):
+def masking_paramsdatav(RSDPower, data, kmin = 0, kmax = 2, lmax = 4, xi=False):
     
     kcut_min = get_closest_index_in_data( kmin, RSDPower.kmin_y )   
     kcut_max = get_closest_index_in_data( kmax, RSDPower.kmax_y )
     
     if xi : kcut_min, kcut_max = 0, RSDPower.rcenter.size
-        
+    if len(data.shape) == 1 : data = data.reshape(1, data.size)
     Nx, Ny = data.shape
-  
+    # Ny : k or r direction
+    
     mask2= np.zeros((Nx, Ny), dtype=bool)
     if lmax == 0: l = 1
     elif lmax == 2: l = 2
@@ -502,7 +506,7 @@ def masking_paramsdatav(RSDPower, data, kmin = 0, kmax = 100, lmax = 4, xi=False
     
 
     
-def BandpowerFisher(params, RSDPower, kmin = 0, kmax = 100, lmax=4):
+def BandpowerFisher(params, RSDPower, kmin = 0, kmax = 10, lmax=4):
     
     ## calling stored cov and datavector
     covPP = np.genfromtxt(params['covPP_filename'])
@@ -661,7 +665,7 @@ def DiagonalBlockwiseInversion3x3( mat1, mat2, mat3, mat4, mat5, mat6, mat7, mat
     
     return FF
 
-def DirectProjection_to_params(params, RSDPower, parameter =[0,1,2,3], kmin = 0, kmax = 100, lmax = 4, diffs = False):
+def DirectProjection_to_params(params, RSDPower, parameter =[0,1,2,3], kmin = 0, kmax = 10, lmax = 4, diffs = False):
     
     ## calling stored cov and datavector
     covPP = np.genfromtxt(params['covPP_filename'])
@@ -719,7 +723,9 @@ def DirectProjection_to_params(params, RSDPower, parameter =[0,1,2,3], kmin = 0,
     
     if 'fisherXi_filename' not in params: FisherXi = pinv(covXi, rcond=1e-30)
     else : FisherXi = np.genfromtxt(params['fisherXi_filename'])
-
+    if np.sum(FisherXi.diagonal() < 0) != 0 : 
+        raise ValueError(' Inversion Failed! ')
+        
     F_params_Xi = np.dot(np.dot(params_xi_datav_mar, FisherXi), params_xi_datav_mar.T)
         
     if 'fishertot_filename' not in params:    
@@ -762,15 +768,46 @@ def DirectProjection_to_params(params, RSDPower, parameter =[0,1,2,3], kmin = 0,
 
     
     
-def Calculate_Fisher_tot(params, RSDPower, kmin = 0, kmax = 100, lmax = 4):
+def Calculate_Fisher_tot(params, RSDPower, kmin = 0, kmax = 10, lmax = 4):
     
-    if 'covPP_filename' not in params : raise ValueError('Covariance_matrix() should be called first')
+    if 'covPP_filename' not in params : 
+        raise ValueError('Covariance_matrix() should be called first')
+        
     ## calling stored cov and datavector
     covPP = np.genfromtxt(params['covPP_filename'])
     covPP_masked = masking(RSDPower, covPP, kmin=kmin, kmax=kmax, lmax=lmax)
     covXi = masking(RSDPower, np.genfromtxt(params['covXi_filename']), xi=True, lmax=lmax)
     covPXi = masking(RSDPower, np.genfromtxt(params['covPXi_filename']), kmin = kmin, kmax = kmax, lmax=lmax)
+    
+    if 'fisherXi_filename' not in params: 
+        FisherXi = pinv(covXi, rcond=1e-30)
+        if np.sum(FisherXi.diagonal() < 0) != 0 : 
+            raise ValueError(' Inversion Failed! ')
+        f2 = 'data_txt/cov/'+params['name']+'_Xi.fisher'
+        np.savetxt(f2, FisherXi)
+        params['fisherXi_filename']= f2   
+        print 'FisherXi saved ', f2
+        
+    else : FisherXi = np.genfromtxt(params['fisherXi_filename'])
 
+        
+    if 'fisher_bandpower_P_filename' not in params: 
+        
+        if lmax == 0 : 
+            FisherP = np.zeros(covPP_masked.shape) 
+            np.fill_diagonal(FisherP, 1./covPP_masked.diagonal())
+        elif lmax == 2 : raise ValueError('two modes not implemented yet')
+        elif lmax == 4 : 
+            
+            cut = RSDPower.kcenter_y.size
+            covPPlist = [covPP[:cut, :cut], covPP[:cut, cut:2*cut], covPP[:cut, 2*cut:],
+                        covPP[:cut, cut:2*cut], covPP[cut:2*cut, cut:2*cut], covPP[cut:2*cut, 2*cut:], 
+                        covPP[:cut, 2*cut:], covPP[cut:2*cut, 2*cut:], covPP[2*cut:, 2*cut:]]
+            FisherP = masking(RSDPower, DiagonalBlockwiseInversion3x3(*tuple(covPPlist)), kmin=kmin, kmax=kmax, lmax=lmax)
+        f = 'data_txt/cov/'+params['name']+'_bandpower_PP.fisher'
+        np.savetxt(f, FisherP)
+        params['fisher_bandpower_P_filename']= f
+        print '\nFisherP saved ', f
 
     # inverting matrices    
     if 'fishertot_filename' not in params:            
@@ -779,7 +816,7 @@ def Calculate_Fisher_tot(params, RSDPower, kmin = 0, kmax = 100, lmax = 4):
         b = covPXi
         c = covPXi.T #matrix[cutInd+1:, 0:cutInd+1]
         d = covXi
-        ia = FisherP#masking(RSDPower, FisherP, kmin=kmin, kmax=kmax, lmax=lmax)
+        ia = FisherP #masking(RSDPower, FisherP, kmin=kmin, kmax=kmax, lmax=lmax)
 
         Fd = pinv( d - np.dot( np.dot( c, ia ), b) )
         Fc = - np.dot( np.dot( Fd, c), ia)
@@ -796,7 +833,7 @@ def Calculate_Fisher_tot(params, RSDPower, kmin = 0, kmax = 100, lmax = 4):
             np.savetxt(filename, Fisher3_tot)
     
     
-def DirectProjection_to_params_shotnoise(params, RSDPower, p_parameter =[0,1,2,3], xi_parameter =[0,1,2,3], kmin = 0, kmax = 100, lmax = 4):
+def DirectProjection_to_params_shotnoise(params, RSDPower, p_parameter =[0,1,2,3], xi_parameter =[0,1,2,3], kmin = 0, kmax = 10, lmax = 4):
     
     ## calling stored cov and datavector
     covPP = np.genfromtxt(params['covPP_filename'])
@@ -856,8 +893,17 @@ def DirectProjection_to_params_shotnoise(params, RSDPower, p_parameter =[0,1,2,3
     #if dinns : F_params_P[4][4] = 1e-20
     print 'F-params_p\n', F_params_P
     
-    if 'fisherXi_filename' not in params: FisherXi = pinv(covXi, rcond=1e-30)
-    else : FisherXi = np.genfromtxt(params['fisherXi_filename'])
+    if 'fisherXi_filename' not in params: 
+        print 'calculating Fisher_Xi....'
+        FisherXi = pinv(covXi, rcond=1e-30)
+        f2 = 'data_txt/cov/'+params['name']+'_Xi.fisher'
+        np.savetxt(f2, FisherXi)
+        params['fisherXi_filename']= f2  
+        if np.sum(FisherXi.diagonal() < 0) != 0: raise ValueError('Inversion Failed')
+        
+    else : 
+        FisherXi = np.genfromtxt(params['fisherXi_filename'])
+        print 'Use Precalculated fisherXi'
     F_params_Xi = np.dot(np.dot(params_xi_datav_mar, FisherXi), params_xi_datav_mar.T)
     #if len(xi_parameter) == 4: F_params_Xi[-1,-1] = 1e-20 
     #print 'F_params_Xi[-1,-1] = ', F_params_Xi[-1,-1]
@@ -879,6 +925,7 @@ def DirectProjection_to_params_shotnoise(params, RSDPower, p_parameter =[0,1,2,3
 
         Fisher3_tot = np.vstack(( np.hstack(( Fa, Fb )), np.hstack(( Fc, Fd )) ))
         print 'Fisher3_tot diagonal test', np.sum(Fisher3_tot.diagonal() <0)
+        if np.sum(Fisher3_tot.diagonal() < 0) != 0: raise ValueError('Inversion Failed')
       
     length_p = FisherP.shape[0]
     F_pp = Fisher3_tot[:length_p, :length_p]
@@ -938,6 +985,7 @@ def DirectProjection_to_params_shotnoise(params, RSDPower, p_parameter =[0,1,2,3
     print 'chisquare 2 4x4 (after proj X)', chisquare2
     
     F_params_tot = FisherProjection_Fishergiven(datav, Fisher3_tot)
+    print 'F_params_tot\n', F_params_tot
     #if 3 in xi_parameter : F_params_tot[-1,-1] = 1e-20
     
     print 'chisquare 3 4x4 (direct proj)', np.dot(np.dot( truth2, F_params_tot), truth2 )
@@ -967,7 +1015,7 @@ def DirectProjection_to_params_shotnoise(params, RSDPower, p_parameter =[0,1,2,3
 
 
 
-def CumulativeSNR(params, RSDPower, kmin=0, kmax=100, lmax=4):
+def CumulativeSNR(params, RSDPower, kmin=0, kmax=2, lmax=4):
     
     
     if lmax == 0 : l = 1
@@ -1075,7 +1123,7 @@ def CumulativeSNR(params, RSDPower, kmin=0, kmax=100, lmax=4):
     
     
     
-def Fisher_params(params, RSDPower, parameter = [0,1,2,3], kmin=0, kmax=100, lmax=4):
+def Fisher_params(params, RSDPower, parameter = [0,1,2,3], kmin=0, kmax=2, lmax=4):
     
     """
     parameter : parameter index that you want to include in Fisher matrix
@@ -1093,7 +1141,7 @@ def Fisher_params(params, RSDPower, parameter = [0,1,2,3], kmin=0, kmax=100, lma
    
     params_datav_mar = np.vstack(([ params_datav[p,:] for p in parameter] ))
     params_datav_mar_kcut = masking_paramsdatav(RSDPower, params_datav_mar, kmin=kmin, kmax=kmax, lmax=lmax)
-    params_datav_mar = masking_paramsdatav(RSDPower, params_datav_mar, lmax=lmax)
+    params_datav_mar = masking_paramsdatav(RSDPower, params_datav_mar, lmax=lmax, kmin = RSDPower.KMIN, kmax = RSDPower.KMAX)
     
     # projecting to params space
     F_params_P = np.dot( np.dot( params_datav_mar_kcut, Fisher_P), params_datav_mar_kcut.T)

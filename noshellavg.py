@@ -524,9 +524,9 @@ class NoShell_covariance():
             # k bins setting
             #self.klist, self.dk = np.linspace(self.KMIN, self.KMAX, self.n + 1, retstep =True)
             
-            self.klist, self.dk = np.linspace(self.KMIN, self.KMAX, self.n, retstep = True)
-            self.kmin = np.delete(self.klist,-1)
-            self.kmax = np.delete(self.klist,0)
+            self.kbin, self.dk = np.linspace(self.KMIN, self.KMAX, self.n, retstep = True)
+            self.kmin = np.delete(self.kbin,-1)
+            self.kmax = np.delete(self.kbin,0)
             #self.kcenter = self.kmin + self.dk/2.
             self.kcenter = (3 * (self.kmax**3 + self.kmax**2 * self.kmin + self.kmax*self.kmin**2 + self.kmin**3))/(4 *(self.kmax**2 + self.kmax * self.kmin + self.kmin**2))
             
@@ -558,7 +558,7 @@ class NoShell_covariance():
             
             # k bin for xi integral setting
             self.kbin = np.logspace(np.log10(KMIN),np.log10(KMAX), self.n, base=10)
-            self.kcenter = np.array([(np.sqrt(self.kbin[i] * self.kbin[i+1])) for i in range(len(self.kbin_x)-1)])
+            self.kcenter = np.array([(np.sqrt(self.kbin[i] * self.kbin[i+1])) for i in range(len(self.kbin)-1)])
             self.kmin = np.delete(self.kbin,-1)
             self.kmax = np.delete(self.kbin,0)
             self.dk = self.kmax - self.kmin
@@ -620,6 +620,7 @@ class NoShell_covariance():
         Pm = interp1d(k, P, kind= "linear")
         #self.Pmlist = Pm(self.kcenter)
         #self.RealPowerBand = Pm(self.kcenter)
+        self.Pm_interp = Pm
         self.RealPowerBand = Pm(self.kcenter)
         self.RealPowerBand_y = Pm(self.kcenter_y)
 
@@ -637,23 +638,34 @@ class NoShell_covariance():
         b = self.b
         f = self.f
         s = self.s
-
-        kcenter = self.kcenter_y
+        
+        
+        kbin = self.kbin
+        kcenter= self.kcenter_y
         mulist = self.mulist
         dmu = self.dmu
-        PS = self.RealPowerBand_y
+        PS = self.Pm_interp(kbin)
         
-        matrix1, matrix2 = np.mgrid[0:mulist.size,0:kcenter.size]
+        matrix1, matrix2 = np.mgrid[0:mulist.size,0:kbin.size]
         mumatrix = self.mulist[matrix1]
         Le_matrix = Ll(l,mumatrix)
         
-        kmatrix = kcenter[matrix2]
+        kmatrix = kbin[matrix2]
         Dmatrix = np.exp(- kmatrix**2 * mumatrix**2 * self.s**2) #FOG matrix
         if self.s == 0: Dmatrix = 1.
         R = (b + f * mumatrix**2)**2 * Dmatrix * Le_matrix
-        muint = (2 * l + 1.)/2 * PS * romberg( R, dx=dmu, axis=0 )
-
-        return muint
+        Pmultipole = (2 * l + 1.)/2 * PS * romberg( R, dx=dmu, axis=0 )
+        if l==0 : Pmultipole+= 1./self.nn
+        
+        Pmultipole_interp = interp1d(kbin, Pmultipole, kind= "linear")
+        #self.Pmlist = Pm(self.kcenter)
+        #self.RealPowerBand = Pm(self.kcenter)
+        if l ==0 : self.Pmultipole0_interp = Pmultipole_interp
+        elif l ==2 : self.Pmultipole2_interp = Pmultipole_interp
+        elif l ==4 : self.Pmultipole4_interp = Pmultipole_interp
+        else : raise ValueError('l should be 0, 2, 4')
+            
+        return Pmultipole_interp(kcenter)
 
 
     def multipole_P_band_all(self):
@@ -677,7 +689,62 @@ class NoShell_covariance():
         self.multipole_bandpower0 = result1[0]
         self.multipole_bandpower2 = result1[1]
         self.multipole_bandpower4 = result1[2]
+      
+    
+    def multipole_Xi(self,l):
+        """
+        Calculate power spectrum multipoles up to quadrupole
         
+        Parameters
+        ----------
+        l : mode (0, 2, 4)
+        
+        """
+        import cmath
+        I = cmath.sqrt(-1)
+        
+
+        kbin = self.kbin_y
+        rcenter = self.rcenter
+
+        dr = self.dr
+        rmin = self.rmin
+        rmax = self.rmax
+        mulist = self.mulist
+
+        #Pmlist = self.Pmlist
+        #Pm = self.Pm_interp(kbin)
+        s = self.s
+        b = self.b
+        f = self.f
+        Vs = self.Vs
+        nn = self.nn
+
+        matrix1,matrix2 = np.mgrid[0:len(kbin),0:len(rcenter)]
+        kmatrix = kbin[matrix1]
+        
+        rminmatrix = rmin[matrix2]
+        rmaxmatrix = rmax[matrix2]
+        rmatrix = rcenter[matrix2]
+        Vir = 4./3 * np.fabs(rmax**3 - rmin**3)
+        
+        if l == 0 : Pm = self.Pmultipole0_interp(kbin) - 1./self.nn
+        elif l == 2 : Pm = self.Pmultipole2_interp(kbin)
+        elif l == 4 : Pm = self.Pmultipole4_interp(kbin)
+        else : raise ValueError('l should be 0, 2, 4')
+            
+        Pmatrix = Pm[matrix1]
+        from fortranfunction import sbess
+        sbess = np.vectorize(sbess)
+        
+        #AvgBessel = np.array([ avgBessel(l, k ,rmin, rmax) for k in kcenter ])/Vir
+        #AvgBessel = avgBessel(l, kmatrix, rminmatrix, rmaxmatrix )/Vir
+        AvgBessel = sbess(l, kmatrix * rmatrix)
+        multipole_xi = np.real(I**l) * simpson(kmatrix**2 * Pmatrix * AvgBessel/(2*np.pi**2), kmatrix, axis=0)#/Vir
+
+        return multipole_xi
+    
+    
            
             
     def covariance_PP(self, l1, l2):
@@ -893,7 +960,7 @@ class NoShell_covariance():
         import cmath
         I = cmath.sqrt(-1)
         
-        kcenter = self.kcenter
+        kbin = self.kbin
         rbin = self.rbin
         rcenter = self.rcenter
         dr = self.dr
@@ -904,16 +971,16 @@ class NoShell_covariance():
         dr = self.dr
         dmu = self.dmu
         #Pmlist = self.Pmlist
-        Pm = self.RealPowerBand
+        Pm = self.Pm_interp(kbin)
         s = self.s
         b = self.b
         f = self.f
         Vs = self.Vs
         nn = self.nn
     
-        matrix1,matrix2 = np.mgrid[0:len(mulist),0:len(kcenter)]
+        matrix1,matrix2 = np.mgrid[0:len(mulist),0:len(kbin)]
         mumatrix = mulist[matrix1] # mu matrix (axis 0)
-        kmatrix = kcenter[matrix2] # k matrix (axis 1)
+        kmatrix = kbin[matrix2] # k matrix (axis 1)
         Le_matrix = Ll(l, mumatrix)
         #Pmmatrix = Pm[matrix2]
         const =  np.real(I**l) * (2 * l + 1)/2. / (2 * np.pi**2)
@@ -927,8 +994,8 @@ class NoShell_covariance():
         muintf = romberg(df ,dx=dmu, axis=0) # return 1d array along k-axis
         muints = romberg(ds ,dx=dmu, axis=0) # return 1d array along k-axis
     
-        matrix1,matrix2 = np.mgrid[0:len(kcenter),0:len(rcenter)]
-        kmatrix = kcenter[matrix1]
+        matrix1,matrix2 = np.mgrid[0:len(kbin),0:len(rcenter)]
+        kmatrix = kbin[matrix1]
         Pmmatrix = Pm[matrix1]
         rminmatrix = rmin[matrix2]
         rmaxmatrix = rmax[matrix2]
@@ -947,12 +1014,7 @@ class NoShell_covariance():
         Total_Integb = simpson(kmatrix**2 * Pmmatrix * intb * AvgBessel, kmatrix, axis=0)#/Vir
         Total_Integf = simpson(kmatrix**2 * Pmmatrix * intf * AvgBessel, kmatrix, axis=0)#/Vir
         Total_Integs = simpson(kmatrix**2 * Pmmatrix * ints * AvgBessel, kmatrix, axis=0)#/Vir
-    
-        #sys.stdout.write('.')
-        
-        
-        
-        
+
         return Total_Integb, Total_Integf, Total_Integs
     
     def derivative_bfs_all(self):
@@ -970,10 +1032,11 @@ class NoShell_covariance():
         * need multiprocessing module
         
         """
-        #from fortranfunction import sbess
-        #sbess = np.vectorize(sbess)    
+        from fortranfunction import sbess
+        sbess = np.vectorize(sbess)    
 
-        kcenter = self.kcenter
+        #kcenter = self.kcenter
+        kbin = self.kbin
         rbin = self.rbin
         rcenter = self.rcenter
         dr = self.dr
@@ -981,9 +1044,9 @@ class NoShell_covariance():
         rmax = self.rmax
         mulist = self.mulist
         dmu = self.dmu
-        dk = self.dk
+        #dk = self.dk
         dr = self.dr
-        Pm = self.RealPowerBand
+        Pm = self.Pm_interp(kbin)
         s = self.s
         b = self.b
         f = self.f
@@ -992,9 +1055,9 @@ class NoShell_covariance():
         
     
         # generating 2-dim matrix for k and mu, matterpower spectrum, FoG term
-        matrix1,matrix2 = np.mgrid[0:len(mulist),0:len(kcenter)]
+        matrix1,matrix2 = np.mgrid[0:len(mulist),0:len(kbin)]
         mulistmatrix = mulist[matrix1] # mu matrix (axis 0)
-        klistmatrix = kcenter[matrix2] # k matrix (axis 1)
+        klistmatrix = kbin[matrix2] # k matrix (axis 1)
         Le_matrix0 = Ll(0,mulistmatrix)
         Le_matrix2 = Ll(2,mulistmatrix)
         Le_matrix4 = Ll(4,mulistmatrix)
@@ -1062,19 +1125,18 @@ class NoShell_covariance():
         Vir1 = 4./3 * pi * np.fabs(rminmatrix**3 - rmaxmatrix**3)
         Vir2 = 4./3 * pi * np.fabs(rminmatrix2**3 - rmaxmatrix2**3)
         Vi = 4./3 * pi * np.fabs(rmin**3 - rmax**3)
-        
-        def AvgBessel_q(q, order, (l, kcenter, rmin, rmax)):
-            Avg = [avgBessel(l,k,rmin,rmax) for k in kcenter] #2D (kxr)
+        """
+        def AvgBessel_q(q, order, (l, kbin, rmin, rmax)):
+            Avg = [avgBessel(l,k,rmin,rmax) for k in kbin] #2D (kxr)
             #sys.stdout.write('.')
             q.put((order,Avg))
+        #inputs_bessel = [(0, kbin,rmin,rmax),(2, kbin,rmin,rmax), (4, kbin,rmin,rmax) ]
         """
-        def AvgBessel_q(q, order, (l, kcenter, rcenter)):
-            Avg = [sbess(l,k * rcenter) for k in kcenter] #2D (kxr)
+        def AvgBessel_q(q, order, (l, kbin, rcenter)):
+            Avg = [sbess(l,k * rcenter) for k in kbin] #2D (kxr)
             sys.stdout.write('.')
             q.put((order,Avg))
-        """
-        inputs_bessel = [(0, kcenter,rmin,rmax),(2, kcenter,rmin,rmax), (4, kcenter,rmin,rmax) ]
-        #inputs_bessel = [(0.0, kcenter,rcenter),(2.0, kcenter,rcenter), (4.0, kcenter,rcenter) ]
+        inputs_bessel = [(0.0, kbin,rcenter),(2.0, kbin,rcenter), (4.0, kbin,rcenter) ]
         
         B_queue = Queue()
         B_processes = [Process(target=AvgBessel_q, args=(B_queue,z[0], z[1])) for z in zip(range(3), inputs_bessel)]
@@ -1100,16 +1162,16 @@ class NoShell_covariance():
         avgBesselmatrix2 = np.array(Bessel_list[1])
         avgBesselmatrix4 = np.array(Bessel_list[2])
 
-        matrix1, matrix2 = np.mgrid[0:len(kcenter), 0:len(rcenter)]
+        matrix1, matrix2 = np.mgrid[0:len(kbin), 0:len(rcenter)]
         Volume_double = Vir1 * Vir2
-        kmatrix = kcenter[matrix1]
-        try:
-            if dk.size == 1: pass
-            else : dk = dk[matrix1]
-        except (AttributeError): pass
+        kmatrix = kbin[matrix1]
+        #try:
+        #    if dk.size == 1: pass
+        #    else : dk = dk[matrix1]
+        #except (AttributeError): pass
         
-        Vik = 4./3 * pi * np.fabs(self.kmax**3 - self.kmin**3)
-        Vik = Vik[matrix1]
+        #Vik = 4./3 * pi * np.fabs(self.kmax**3 - self.kmin**3)
+        #Vik = Vik[matrix1]
         
         
         
@@ -1125,7 +1187,7 @@ class NoShell_covariance():
                 #re = np.sum(Rint_result * Vik/(4*pi) * avgBmatrix * avgBessel2, axis=0)
                 #re = np.sum(Rint_result * dk * kmatrix**2 * avgBmatrix * avgBessel2, axis=0)
                 relist.append(re)
-            FirstTerm = np.array(relist)  / Volume_double[0:len(rcenter)/2,:] #2D
+            FirstTerm = np.array(relist)#  / Volume_double[0:len(rcenter)/2,:] #2D
             
             LastTermmatrix = np.zeros((len(rcenter),len(rcenter)))
             if l1 == l2:
@@ -1153,7 +1215,7 @@ class NoShell_covariance():
                 #re = np.sum(Rint_result * Vik/(4*pi)* avgBmatrix * avgBessel2, axis=0)
                 #re = np.sum(Rint_result * dk * kmatrix**2 * avgBmatrix * avgBessel2, axis=0)
                 relist.append(re)
-            FirstTerm = np.array(relist)/ Volume_double[len(rcenter)/2:len(rcenter),:] #2D
+            FirstTerm = np.array(relist) #/ Volume_double[len(rcenter)/2:len(rcenter),:] #2D
             
             LastTermmatrix = np.zeros((len(rcenter),len(rcenter)))
             if l1 == l2:
@@ -1199,7 +1261,57 @@ class NoShell_covariance():
 
 
 
-    def covariance_PXi( self, l1, l2 ):
+    def covariance_PXi(self, l1, l2):
+        from fortranfunction import sbess
+        sbess = np.vectorize(sbess)
+                
+        import cmath
+        I = cmath.sqrt(-1)
+        
+        klist = self.kbin_y
+        kcenter = self.kcenter_y
+        kmin = self.kmin_y
+        kmax = self.kmax_y
+        #skbin = self.skbin
+        #skcenter =self.skcenter
+        #sdlnk = self.sdlnk
+        rlist = self.rbin
+        rcenter = self.rcenter
+        #dr = self.dr
+        rmin = self.rmin
+        rmax = self.rmax
+        
+        matrix1, matrix2 = np.mgrid[ 0:kcenter.size, 0: rcenter.size]
+        kmatrix = kcenter[matrix1]
+        rmatrix = rcenter[matrix2]
+        rminmatrix = rmin[matrix2]
+        rmaxmatrix = rmax[matrix2]
+     
+        Besselmatrix = sbess(l2, kmatrix * rmatrix)
+        #Vir = 4/3. * pi * ( rmaxmatrix**3 - rminmatrix**3)
+        #Besselmatrix = avgBessel(l2,kmatrix,rminmatrix,rmaxmatrix)/Vir
+        
+        Vi = 4./3 * pi * ( self.kmax_y**3 - self.kmin_y**3 ) #4*np.pi*kcenter**2
+        
+        if l1 == 0 :
+            if l2 == 0 : Cll = self.covariance_PP00.diagonal() * Vi
+            elif l2 == 2 : Cll = self.covariance_PP02.diagonal() * Vi
+            else : Cll = self.covariance_PP04.diagonal() * Vi
+        elif l1 == 2 :
+            if l2 == 0 : Cll = self.covariance_PP02.diagonal() * Vi
+            elif l2 == 2 : Cll = self.covariance_PP22.diagonal() * Vi
+            else : Cll = self.covariance_PP24.diagonal() * Vi
+        elif l1 == 4 :
+            if l2 == 0 : Cll = self.covariance_PP04.diagonal() * Vi
+            elif l2 == 2 : Cll = self.covariance_PP24.diagonal() * Vi
+            else : Cll = self.covariance_PP44.diagonal()* Vi
+        else : raise ValueError('l should be 0,2,4')
+        Cll = np.real(I**(l2)) * Cll * kcenter**2 /(2*np.pi**2) #Vi/(2*np.pi)**3
+        Cpxill = Cll[matrix1] * Besselmatrix 
+        return Cpxill
+        
+        
+    def _covariance_PXi( self, l1, l2 ):
 
 
         import numpy as np
@@ -1356,3 +1468,26 @@ class NoShell_covariance():
         self.dPb2, self.dPf2, self.dPs2 = self.derivative_P_bfs(2)
         self.dPb4, self.dPf4, self.dPs4 = self.derivative_P_bfs(4)
 
+
+        
+        
+class NoShell_covariance_MCMC(NoShell_covariance):
+
+    def __init__(self, KMIN, KMAX, RMIN, RMAX, n, n2, N_y, b, f, s, nn, logscale = False):
+        NoShell_covariance.__init__(self, KMIN, KMAX, RMIN, RMAX, n, n2, N_y, b, f, s, nn, logscale = logscale)
+        
+    def init_like_class(self, datav_filename, fisher_filename, mask_filename):
+        
+        print ' Read data...'
+        print ' datav  : ', datav_filename
+        print ' fisher : ', fisher_filename
+        print ' mask   : ', mask_filename
+        
+        self.datav_fid = np.genfromtxt(datav_filename)
+        self.fisher = np.genfromtxt(fisher_filename)
+        mask = np.genfromtxt(mask_filename)
+        self.mask = np.array(mask, dtype=bool)
+        
+        print ' N data point after masking:', self.datav_fid[self.mask].size
+
+        
