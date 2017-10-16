@@ -148,7 +148,7 @@ def sample_main(lik_class, varied_parameters, iterations, nwalker, nthreads,
 
         if i == 0: 
             t1 = time.time() - t0 
-            totTime = t1 * iterations * 260./430
+            totTime = t1 * iterations * 0.5
         sys.stdout.write('iteration {}/{} remained time {} s \r'.format(i+1, iterations, (iterations-i)*t1))
         sys.stdout.flush()
         i+=1

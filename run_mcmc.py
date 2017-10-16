@@ -15,14 +15,15 @@ def run_mcmc(params, pool=None):
     kmin, kmax, kN = params['k']
     rmin, rmax, rN = params['r']
     logscale = params['logscale']
-    KMIN, KMAX = 1e-3, 2.
+    KMIN, KMAX = 1e-3, 2.0
     lmax = params['lmax']
     parameter_ind = params['parameter_ind']  
 
     (varied_params, varied_params_fid,
      cosmo_names, cosmo_min, cosmo_fid, cosmo_max, cosmo_fid_sigma) = parse_priors_and_ranges(params)
-       
+     
     b,f,s,nn = cosmo_fid
+
     print '-----------------------------------'
     print ' Run Error Analaysis'
     print '-----------------------------------'
@@ -33,12 +34,16 @@ def run_mcmc(params, pool=None):
     print ' lmax={}'.format(lmax)
     print '-----------------------------------'
     
-    lik_class = NoShell_covariance_MCMC(KMIN, KMAX, rmin, rmax, 2**10 + 1, rN, kN, b, f, s, nn )
+    lik_class = NoShell_covariance_MCMC(KMIN, KMAX, rmin, rmax, 2**12 + 1, rN, kN, b, f, s, nn, logscale = False )
 
-
+    
     if 'fisher_filename' not in params : 
         Covariance_matrix(params, lik_class)
+        #P_multipole(lik_class)
         Calculate_Fisher_tot(params, lik_class, kmin = kmin, kmax = kmax, lmax=lmax)
+        #params_datavector(params, lik_class)
+        #params_xi_datavector(params, lik_class)
+        
         if 'p' in params['probe']: 
             #print 'calling p fisher'
             params['fisher_filename'] = params['fisher_bandpower_P_filename']
@@ -46,8 +51,14 @@ def run_mcmc(params, pool=None):
             #print 'calling xi fisher'
             params['fisher_filename'] = params['fisherXi_filename']
         if 'p' in params['probe'] and 'xi' in params['probe']:
-            #print 'calling p+xi fisher'
-            params['fisher_filename'] = params['fishertot_filename']     
+            print 'calling p+xi fisher'
+            params['fisher_filename'] = params['fishertot_filename']  
+    else : 
+        file = 'matterpower_z_0.55.dat'  # from camb (z=0.55)
+        #lik_class.MatterPower(file = file)
+        P_multipole(lik_class)
+        #lik_class.multipole_P_band_all()
+        
     fisher_filename = params['fisher_filename']
     
     

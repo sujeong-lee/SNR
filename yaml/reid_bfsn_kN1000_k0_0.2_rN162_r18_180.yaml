@@ -1,0 +1,24 @@
+name : reid_bfs_kN1000_k0_0.2_rN162_r18_180
+k : [0.0000000001, 0.2, 1000]  #[kmin, kmax, kN]
+r : [18, 180, 163]  #[rmin, rmax, rN]
+logscale : False
+parameter_ind : [0,1,2]
+lmax : 4
+
+# precalculated filename
+
+covPP_filename : data_txt/cov/reid_bfsn_kN1000_k0_0.2_rN162_r18_180_PP.cov # no kmin kmax cut
+covXi_filename : data_txt/cov/reid_bfsn_kN1000_k0_0.2_rN162_r18_180_Xi.cov  
+covPXi_filename : data_txt/cov/reid_bfsn_kN1000_k0_0.2_rN162_r18_180_PXi.cov # no kmin kmax cut
+multipole_p_filename : data_txt/datav/reid_bfsn_kN1000_k0_0.2_rN162_r18_180_multipole_p.datavector # no kcut
+derivative_P_filename : data_txt/datav/reid_bfsn_kN1000_k0_0.2_rN162_r18_180_P.datavector  # no kcut
+derivative_Xi_filename : data_txt/datav/reid_bfsn_kN1000_k0_0.2_rN162_r18_180_Xi.datavector 
+params_datavector_filename : data_txt/datav/reid_bfsn_kN1000_k0_0.2_rN162_r18_180_params.datavector #no kmin kmax cut
+
+#fisher_bandpower_P_filename : data_txt/cov/reid_bf_kN1000_rN90_bandpower_PP.fisher # kmin kcut applied
+#fisher_bandpower_Xi_filename : data_txt/cov/reid_bf_kN1000_rN90_bandpower_Xi.fisher
+#fisher_bandpower_tot_filename : data_txt/cov/reid_bf_kN1000_rN90_bandpower_tot.fisher #kmin kcut applied in PP side before projection
+
+######## output ##########
+SNR : 0
+Reid : 0

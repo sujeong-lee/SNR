@@ -1,0 +1,23 @@
+name : default_bfs_kN1000_ke-10_r0_200_rN200_nn1e4
+k : [0.0000000001, 2, 1000]  #[kmin, kmax, kN]
+r : [0.001, 200,201]  #[rmin, rmax, rN]
+logscale : False
+parameter_ind : [0,1,2]
+lmax : 4
+nn : 10000
+# precalculated filename
+#covPP_filename : data_txt/cov/default_kN1000_PP.cov # no kmin kmax cut
+#covXi_filename : data_txt/cov/default_kN1000_Xi.cov  
+#covPXi_filename : data_txt/cov/default_kN1000_PXi.cov # no kmin kmax cut
+#multipole_p_filename : data_txt/datav/default_kN1000_multipole_p.datavector # no kcut
+#derivative_P_filename : data_txt/datav/default_kN1000_P.datavector  # no kcut
+#derivative_Xi_filename : data_txt/datav/default_kN1000_Xi.datavector 
+#params_datavector_filename : data_txt/datav/test_bf_params.datavector #no kmin kmax cut
+
+#fisher_bandpower_P_filename : data_txt/cov/default_kN1000_bandpower_PP.fisher # kmin kcut applied
+#fisher_bandpower_Xi_filename : data_txt/cov/default_kN1000_bandpower_Xi.fisher
+#fisher_bandpower_tot_filename : data_txt/cov/test_bf_bandpower_tot.fisher #kmin kcut applied in PP side before projection
+
+######## output ##########
+SNR : 1
+Reid : 0

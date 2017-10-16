@@ -1,0 +1,23 @@
+name : mcmc_default_xionly_bfs
+k : [0.001, 2, 500]  #[kmin, kmax, kN]
+r : [0.001, 180, 181]  #[rmin, rmax, rN]
+logscale : False
+parameter_ind : [0,1,2,3]
+lmax : 4
+
+## MCMC parameters
+
+b_range : [0.8, 2, 2.5, 0.2]
+f_range : [0.2, 0.74, 1.2, 0.074]
+s_range : [2.5, 3.5, 4.5, 0.35]
+#nn_range : [0.0, 0.0003, 0.001, 0.0003]
+nn_range : 0.0003
+
+n_threads : 32
+iterations : 10000
+nwalker : 32
+
+probe : ['xi']
+#fisher_filename : data_txt/cov/test_bf_k0_025_kN1000_r18_180_rN162_bandpower_PP.fisher 
+#datav_filename : data_txt/datav/test_bf_k0_025_kN1000_r18_180_rN162_multipole_p.datavector 
+

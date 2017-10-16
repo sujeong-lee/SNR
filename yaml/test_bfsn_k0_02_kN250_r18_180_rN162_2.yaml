@@ -1,0 +1,24 @@
+name : test_bfsn_k0_02_kN250_r18_180_rN162_2
+k : [0.001, 0.2, 250]  #[kmin, kmax, kN]
+r : [18, 180, 163]  #[rmin, rmax, rN]
+logscale : False
+parameter_ind : [0,1,2,3]
+lmax : 4
+
+direct_projection : 1
+# precalculated filename
+#covPP_filename : data_txt/cov/test_bf_k0_025_kN1000_r18_180_rN162_PP.cov # no kmin kmax cut
+#covXi_filename : data_txt/cov/test_bf_k0_025_kN1000_r18_180_rN162_Xi.cov  
+#covPXi_filename : data_txt/cov/test_bf_k0_025_kN1000_r18_180_rN162_PXi.cov # no kmin kmax cut
+#multipole_p_filename : data_txt/datav/test_bf_k0_025_kN1000_r18_180_rN162_multipole_p.datavector # no kcut
+#derivative_P_filename : data_txt/datav/test_bf_k0_025_kN1000_r18_180_rN162_P.datavector  # no kcut
+#derivative_Xi_filename : data_txt/datav/test_bf_k0_025_kN1000_r18_180_rN162_Xi.datavector 
+#params_datavector_filename : data_txt/datav/test_bf_k0_025_kN1000_r18_180_rN162_params.datavector #no kmin kmax cut
+
+#fisher_bandpower_P_filename : data_txt/cov/test_bf_k0_025_kN1000_r18_180_rN162_bandpower_PP.fisher # kmin kcut applied
+#fisher_bandpower_Xi_filename : data_txt/cov/test_bf_k0_025_kN1000_r18_180_rN162_bandpower_Xi.fisher
+#fisher_bandpower_tot_filename : data_txt/cov/test_bf_k0_025_kN1000_r18_180_rN162_bandpower_tot.fisher #kmin kcut applied in PP side before projection
+
+######## output ##########
+SNR : 0
+Reid : 0
