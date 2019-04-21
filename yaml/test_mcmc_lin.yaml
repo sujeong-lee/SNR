@@ -1,11 +1,11 @@
 name : test_mcmc
-savedir : output/test_mcmc_P_nl/
+savedir : output/test_mcmc_P_lin/
 k : [0.01, 0.2, 500]  #[kmin, kmax, kN]
-r : [0.001, 200, 40]  #[rmin, rmax, rN]
+r : [0.1, 200, 40]  #[rmin, rmax, rN]
 logscale : False
 parameter_ind : [0,1,2,3]
 lmax : 2
-matterpower : /n/des/lee.5922/Dropbox/repositories/CMASS/code/cosmology_chuang/Chuang_cosmology_Pm_nl_z059.txt
+matterpower : /n/des/lee.5922/Dropbox/repositories/CMASS/code/cosmology_chuang/Chuang_cosmology_Pm_lin_z059.txt
 generate_datav_only : True
 ## MCMC parameters
 

@@ -1,0 +1,23 @@
+name : mcmc_default_combined_bfsn_p02
+k : [0.001, 2, 200]  #[kmin, kmax, kN]
+r : [0.001, 180, 181]  #[rmin, rmax, rN]
+logscale : False
+parameter_ind : [0,1,2]
+lmax : 2
+
+## MCMC parameters
+
+b_range : [1.8, 2, 2.2, 0.05]
+f_range : [0.4, 0.74, 1.0, 0.01]
+s_range : [3.0, 3.5, 4.0, 0.1]
+nn_range : [0.0001, 0.0003, 0.0005, 0.00001]
+#nn_range : 0.0003
+
+n_threads : 30
+iterations : 2000
+nwalker : 30
+
+probe : ['p','xi']
+#fisher_filename : data_txt/cov/default_kN200_ke-3_rN180_re-3_bf_p02_fishertot.fisher 
+#datav_filename : data_txt/datav/test_bf_k0_025_kN1000_r18_180_rN162_multipole_p.datavector 
+
