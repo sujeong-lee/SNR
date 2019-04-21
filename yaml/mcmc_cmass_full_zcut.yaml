@@ -1,0 +1,27 @@
+name : test_mcmc
+savedir : output/full_cmass_zcut/
+k : [0.01, 0.011, 5]  #[kmin, kmax, kN]
+r : [20, 200, 37]  #[rmin, rmax, rN]
+logscale : False
+parameter_ind : [0]
+lmax : 2
+matterpower : /n/des/lee.5922/Dropbox/repositories/CMASS/code/cosmology_chuang/Chuang_cosmology_Pm_nl_z059.txt
+generate_datav_only : True
+## MCMC parameters
+
+b_range : [0.8, 2, 2.5, 0.2]
+f_range : 0.74 #[0.2, 0.74, 1.2, 0.074]
+s_range : 3.5 #[2.5, 3.5, 4.5, 0.35]
+#nn_range : [0.0, 0.0003, 0.001, 0.0003]
+nn_range : 0.0003
+
+n_threads : 30
+iterations : 10000
+nwalker : 30
+
+probe : ['xi']
+#fisher_filename : data_txt/cov/test_bf_k0_025_kN1000_r18_180_rN162_bandpower_PP.fisher 
+#datav_filename :  /n/des/lee.5922/Dropbox/repositories/CMASS/code/data_txt/full_cmass_zcut_ran10_jk100/datavector.txt 
+# data_txt/datav/test_bf_k0_025_kN1000_r18_180_rN162_multipole_p.datavector 
+#fisher_filename : /n/des/lee.5922/Dropbox/repositories/CMASS/code/data_txt/full_cmass_zcut_ran10_jk100/fisher.txt
+

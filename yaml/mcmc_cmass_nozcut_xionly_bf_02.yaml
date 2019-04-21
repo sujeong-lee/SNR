@@ -1,0 +1,33 @@
+name : mcmc_cmass_nozcut_xionly_bf_02_chuang_flip
+savedir : /n/des/lee.5922/Dropbox/repositories/CMASS/code//data_txt/3D_clustering/mcmc/
+k : [0.02, 0.3, 501]  #[kmin, kmax, kN]
+r : [40, 180, 29] #[rmin, rmax, rN]
+logscale : False
+parameter_ind : [0]
+lmax : 2
+matterpower : /n/des/lee.5922/Dropbox/repositories/CMASS/code/cosmology_chuang/Chuang_cosmology_Pm_lin_z059.txt
+#generate_datav_only : True
+
+## MCMC parameters
+
+b_range : [0.8, 2.0, 3.0, 0.2]
+f_range : [0.1, 0.74, 1.5, 0.07]
+s_range : 0.0
+#s_range : [2.5, 3.5, 4.5, 0.7]
+#nn_range : [0.0001, 0.0003, 0.001, 0.0001]
+nn_range : 0.0003
+
+
+n_threads : 30
+iterations : 10000
+nwalker : 30
+
+probe : ['xi']
+#fisher_filename : data_txt/cov/Pellejero-Ibanez/Pellejero-Ibanez_2016_CMASSDR12_monopole_fisher_matrix.dat
+#fisher_filename : /n/des/lee.5922/Dropbox/repositories/CMASS/code//data_txt/3D_clustering/mcmc/Pellejero-Ibanez_2016_CMASSDR12_fisher_matrix_from_mocks_flip.dat
+fisher_filename : /n/des/lee.5922/Dropbox/repositories/CMASS/code/data_txt/3D_clustering/mcmc/Chuang_2016_LOWZDR12_CMASSDR12_fisher_matrix_from_mocks_z43z75_flip.dat
+#fisher_filename : data_txt/cov/test_bf_k0_025_kN1000_r18_180_rN162_bandpower_PP.fisher 
+#datav_filename : data_txt/datav/mcmc_cmass_zcut_w_fkp_xionly_b_monopole.datavector
+datav_filename : /n/des/lee.5922/Dropbox/repositories/CMASS/code//data_txt/3D_clustering/mcmc/mcmc_cmass_nozcut_xionly_b_02.datavector
+#datav_filename : 
+#/n/des/lee.5922/Dropbox/repositories/CMASS/code//data_txt/3D_clustering/mcmc//datavector.txt

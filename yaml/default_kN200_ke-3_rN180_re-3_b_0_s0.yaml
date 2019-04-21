@@ -1,0 +1,27 @@
+name : default_kN200_ke-3_rN180_re-3_b_p0_s0
+k : [0.001, 2., 500]  #[kmin, kmax, kN]
+r : [0.001, 180, 181]  #[rmin, rmax, rN]
+logscale : False
+parameter_ind : [0]
+lmax : 0
+nn : 0.0003
+s : 0
+direct_projection : 1
+# precalculated filename
+#covPP_filename : data_txt/cov/default_kN500_ke-10_PP.cov # no kmin kmax cut
+#covXi_filename : data_txt/cov/default_kN500_ke-10_Xi.cov  
+#covPXi_filename : data_txt/cov/default_kN500_ke-10_PXi.cov # no kmin kmax cut
+#multipole_p_filename : data_txt/datav/default_kN500_ke-10_multipole_p.datavector # no kcut
+#derivative_P_filename : data_txt/datav/default_kN500_ke-10_P.datavector  # no kcut
+#derivative_Xi_filename : data_txt/datav/default_kN500_ke-10_Xi.datavector 
+#params_datavector_filename : data_txt/datav/default_kN500_ke-10_params.datavector #no kmin kmax cut
+#params_datavector_filename : data_txt/datav/default_kN200_ke-3_rN180_re-3_bfs_p02_params_numeric.datavector
+#params_xi_datavector_filename : data_txt/datav/default_kN200_ke-3_rN180_re-3_bfs_p02_params_xi_numeric.datavector
+
+#fisher_bandpower_P_filename : data_txt/cov/mcmc_default_ponly_bfs_p02_bandpower_PP.fisher
+#fisher_bandpower_Xi_filename : data_txt/cov/default_kN500_bandpower_Xi.fisher
+#fisher_bandpower_tot_filename : data_txt/cov/test_bf_bandpower_tot.fisher #kmin kcut applied in PP side before projection
+#fisherXi_filename : data_txt/cov/mcmc_default_xionly_bfsn_Xi.fisher
+######## output ##########
+SNR : 0
+Reid : 0

@@ -1,5 +1,5 @@
 import time, datetime
-import sys
+import sys, os
 
 import numpy as np
 from numpy import zeros, sqrt, pi, vectorize
@@ -12,7 +12,6 @@ from multiprocessing import Process, Queue
 from noshellavg import *
 #from matplotlib.backends.backend_pdf import PdfPages
 
-import sys
 import argparse
 import yaml
     
@@ -36,9 +35,9 @@ def run_error_analysis(params):
     if 'nn' in params: nn = params['nn']
     parameter_names = np.array(['b', 'f', 's', 'nn'])
     
-    print '-----------------------------------'
-    print ' Run Error Analaysis'
-    print '-----------------------------------'
+    #print '-----------------------------------'
+    #print ' Run Error Analaysis'
+    #print '-----------------------------------'
     print ' parameter setting'
     print ' b={} f={} s={} nn={}'.format(b,f,s,nn)
     print ' free params :'+ str(parameter_names[parameter_ind]) 
@@ -52,10 +51,8 @@ def run_error_analysis(params):
     Covariance_matrix(params, RSDPower)
     Calculate_Fisher_tot(params, RSDPower, kmin = kmin, kmax = kmax, lmax=lmax)
     
-    
-    
-    np.savetxt('data_txt/'+params['name']+'_kcenter.txt', RSDPower.kcenter_y)
-    np.savetxt('data_txt/'+params['name']+'_rcenter.txt', RSDPower.rcenter)
+    np.savetxt(params['savedir']+'kcenter.txt', RSDPower.kcenter_y)
+    np.savetxt(params['savedir']+'rcenter.txt', RSDPower.rcenter)
 
     """
     print '\nStore Bessel functions'
@@ -64,17 +61,19 @@ def run_error_analysis(params):
     m1, m2 = np.mgrid[0:RSDPower.kcenter.size, 0:RSDPower.rcenter.size]
     
     sbess_vector = sbess(0, RSDPower.kcenter[m1]*RSDPower.rcenter[m2])
-    np.savetxt('data_txt/bessel_sbess0.txt',sbess_vector)
+    np.savetxt(params['savedir']_sbess0.txt',sbess_vector)
     
     Vi = 4./3 * np.pi * (RSDPower.rmax**3 - RSDPower.rmin**3)
     AvgBessel = avgBessel(0, RSDPower.kcenter[m1], RSDPower.rmin[m2], RSDPower.rmax[m2] )/Vi[m2]
-    np.savetxt('data_txt/bessel_avgbessel0.txt',AvgBessel)
+    np.savetxt(params['savedir']_avgbessel0.txt',AvgBessel)
     """
                       
     
-    if 'multipole_p_filename' not in params:
-        P_multipole(RSDPower)
-    else : print '\nUse Precalculated multipole_p ', params['multipole_p_filename']
+    if 'multipole_P_filename' not in params:
+        P_multipole(params, RSDPower)
+        #np.savetxt(params['savedir']+'multipole_p.datavector',multipole_datav )
+        #params['multipole_P_filename'] = params['savedir']+'multipole_p.datavector'
+    else : print '\nUse Precalculated multipole_p ', params['savedir']+params['multipole_P_filename']
         
     if 'derivative_P_filename' not in params:
         derivative_P_datavector(params, RSDPower)
@@ -90,7 +89,7 @@ def run_error_analysis(params):
     else : print '\nUse Precalculated params_datavector ', params['params_datavector_filename']     
         
     
-    #BandpowerFisher(params, RSDPower, kmin = kmin, kmax = kmax, lmax = lmax) 
+    BandpowerFisher(params, RSDPower, kmin = kmin, kmax = kmax, lmax = lmax) 
     #Fisher_params(params, RSDPower, parameter = parameter_ind, kmin=kmin, kmax=kmax, lmax=lmax)
     
     direct_projection = 0
@@ -106,7 +105,7 @@ def run_error_analysis(params):
         
     SNR = params['SNR']
     if SNR : 
-        print 'calculating SNR...'
+        print '\ncalculating SNR...'
         CumulativeSNR(params, RSDPower, kmin=kmin, kmax=kmax, lmax=lmax)
 
     Reid = params['Reid']  
@@ -115,14 +114,14 @@ def run_error_analysis(params):
         Reid_error(params, RSDPower, parameter = parameter_ind)
     
     
-    print '------------------ end ---------------------'
+    print '\n------------------ end ---------------------'
 
     
 def Covariance_matrix(params, RSDPower):    
     
-    name = params['name']
+    save_dir = params['savedir']+'/'
 
-    file = 'matterpower_z_0.55.dat'  # from camb (z=0.55)
+    file = None #'matterpower_z_0.55.dat'  # from camb (z=0.55)
     RSDPower.MatterPower(file = file)
     RSDPower.multipole_P_band_all()
     # P covariance matrix ( nine submatrices C_ll' )
@@ -135,7 +134,7 @@ def Covariance_matrix(params, RSDPower):
                 np.hstack([RSDPower.covariance_PP02, RSDPower.covariance_PP22, RSDPower.covariance_PP24 ]),\
                 np.hstack([RSDPower.covariance_PP04, RSDPower.covariance_PP24, RSDPower.covariance_PP44 ])
                 ))
-        f = 'data_txt/cov/'+params['name']+'_PP.cov'
+        f = save_dir+'P.cov'
         np.savetxt(f, C_matrix3PP)
         params['covPP_filename'] = f
     else : print 'Use Precalculated CovPP ', params['covPP_filename']
@@ -148,7 +147,8 @@ def Covariance_matrix(params, RSDPower):
                 np.hstack([RSDPower.covariance02.T, RSDPower.covariance22, RSDPower.covariance24 ]),\
                 np.hstack([RSDPower.covariance04.T, RSDPower.covariance24.T, RSDPower.covariance44 ])
                 ))
-        f2 = 'data_txt/cov/'+params['name']+'_Xi.cov'
+        #f2 = params['savedir']'Xi.cov'
+        f2 = save_dir+'Xi.cov'
         np.savetxt(f2, C_matrix3Xi) 
         params['covXi_filename'] = f2
     else : print 'Use Precalculated CovXi ', params['covXi_filename']
@@ -163,14 +163,15 @@ def Covariance_matrix(params, RSDPower):
                 np.hstack([RSDPower.covariance_PXi40, RSDPower.covariance_PXi42, RSDPower.covariance_PXi44 ])
                 ))
         
-        f3 = 'data_txt/cov/'+params['name']+'_PXi.cov'
+        #f3 = params['savedir']'PXi.cov'
+        f3 = save_dir+'PXi.cov'
         np.savetxt(f3, C_matrix3PXi)
         params['covPXi_filename'] = f3
     else : print 'Use Precalculated CovPXi ', params['covPXi_filename']
 
     ##### end #### -----------------------------------------------------------------------
     
-def P_multipole(RSDPower):
+def P_multipole(params, RSDPower):
 
     # power spectrum multipoles l = 0,2,4
     
@@ -181,12 +182,16 @@ def P_multipole(RSDPower):
     
     multipole_datav = np.hstack([RSDPower.multipole_bandpower0,RSDPower.multipole_bandpower2\
                              ,RSDPower.multipole_bandpower4])
-    #np.savetxt('data_txt/datav/'+params['name']+'_multipole_p.datavector',multipole_datav )
-#    params['multipole_p_filename'] = 'data_txt/datav/'+params['name']+'_multipole_p.datavector'
+    #np.savetxt(params['savedir']'+'multipole_p.datavector',multipole_datav )
+#    params['multipole_P_filename'] = params['savedir']'+'multipole_p.datavector'
+
+    f = params['savedir']+'multipole_p.datavector'
+    np.savetxt(f,multipole_datav)
+    params['multipole_P_filename'] = f
 
     return multipole_datav
     
-def Xi_multipole(RSDPower):
+def Xi_multipole(params, RSDPower):
 
     # power spectrum multipoles l = 0,2,4
     
@@ -197,8 +202,13 @@ def Xi_multipole(RSDPower):
     
     multipole_datav = np.hstack([RSDPower.multipole_xi0,RSDPower.multipole_xi2\
                              ,RSDPower.multipole_xi4])
-    #np.savetxt('data_txt/datav/'+params['name']+'_multipole_xi.datavector',multipole_datav )
-    #params['multipole_xi_filename'] = 'data_txt/datav/'+params['name']+'_multipole_xi.datavector'
+    #np.savetxt(params['savedir']'+'multipole_xi.datavector',multipole_datav )
+    #params['multipole_Xi_filename'] = params['savedir']'+'multipole_xi.datavector'
+        
+    f = params['savedir']+'multipole_xi.datavector'
+    np.savetxt(f,multipole_datav)
+    params['multipole_Xi_filename'] = f
+
     return multipole_datav
     
     
@@ -210,7 +220,8 @@ def derivative_P_datavector(params, RSDPower):
     derivative_P = np.concatenate((np.concatenate((derivative_P0, Pzeros, Pzeros),axis=1 ),\
                                    np.concatenate((Pzeros, derivative_P0, Pzeros),axis=1 ),\
                                    np.concatenate((Pzeros, Pzeros, derivative_P0),axis=1 )), axis=0)
-    f = 'data_txt/datav/'+params['name']+'_P.datavector'
+    #f = params['savedir']'+'P.datavector'
+    f = params['savedir']+'DP_datavector.txt'
     np.savetxt(f,derivative_P)
     params['derivative_P_filename'] = f
     
@@ -239,7 +250,8 @@ def _derivative_Xi_datavector(params, RSDPower):
                                             np.concatenate((Xizeros,RSDPower.dxip2,Xizeros), axis=1),\
                                             np.concatenate((Xizeros,Xizeros,RSDPower.dxip4), axis=1)),axis=0 )
 
-    f2 = 'data_txt/datav/'+params['name']+'_Xi.datavector'
+    #f2 = params['savedir']'+'Xi.datavector'
+    f2 = params['savedir']+'DXi_datavector.txt'
     np.savetxt(f2,derivative_correl_avg)
     params['derivative_Xi_filename'] = f2
 
@@ -252,7 +264,8 @@ def derivative_Xi_datavector(params, RSDPower):
                                             np.concatenate((Xizeros,RSDPower.dxip2,Xizeros), axis=1),\
                                             np.concatenate((Xizeros,Xizeros,RSDPower.dxip4), axis=1)),axis=0 )
 
-    f2 = 'data_txt/datav/'+params['name']+'_Xi.datavector'
+    #f2 = params['savedir']'+'Xi.datavector'
+    f2 = params['savedir']+'DXi_datavector.txt'
     np.savetxt(f2,derivative_correl_avg)
     params['derivative_Xi_filename'] = f2
     
@@ -282,7 +295,8 @@ def params_datavector(params, RSDPower):
             np.hstack([dPN0, dPN1, dPN2]) ))
 
     
-    f = 'data_txt/datav/'+params['name']+'_params.datavector'
+    #f = params['savedir']'+'params.datavector'
+    f = params['savedir']+'DP_params_datavector.txt'
     np.savetxt(f, matrices2P)
     params['params_datavector_filename'] = f
     #else : print 'Use Precalculated params_datavector ', params['params_datavector_filename']
@@ -317,7 +331,9 @@ def params_xi_datavector(params, RSDPower):
             np.hstack([dxin0, dxin2, dxin4]) ))
 
 
-    f = 'data_txt/datav/'+params['name']+'_params_xi.datavector'
+    #f = params['savedir']'+'params_xi.datavector'
+    f = params['savedir']+'DXi_params_datavector.txt'
+
     np.savetxt(f, matrices2P)
     params['params_xi_datavector_filename'] = f
     #else : print 'Use Precalculated params_datavector ', params['params_datavector_filename']
@@ -569,7 +585,8 @@ def BandpowerFisher(params, RSDPower, kmin = 0, kmax = 10, lmax=4):
             #FisherBand_P = FisherProjection_Fishergiven(datav_P, FisherP)
             #FisherBand_P = np.dot(np.dot(datav_P, FisherP), datav_P.T)
         if np.sum(FisherP.diagonal()<=0) != 0 : raise ValueError('Inversion Failed')    
-        f = 'data_txt/cov/'+params['name']+'_bandpower_PP.fisher'
+        #f = params['savedir']'bandpower_PP.fisher'
+        f = params['savedir']+'P_fisher.txt'
         np.savetxt(f, FisherP)
         params['fisher_bandpower_P_filename']= f
         print '\nFisherP saved ', f
@@ -582,7 +599,8 @@ def BandpowerFisher(params, RSDPower, kmin = 0, kmax = 10, lmax=4):
         FisherXi = pinv(covXi, rcond=1e-30)
         if np.sum(FisherXi.diagonal()<=0) != 0 : raise ValueError('Inversion Failed')
             
-        f2 = 'data_txt/cov/'+params['name']+'_Xi.fisher'
+        #f2 = params['savedir']'Xi.fisher'
+        f2 = params['savedir']+'Xi_fisher.txt'
         np.savetxt(f2, FisherXi)
         params['fisherXi_filename']= f2  
         print 'FisherXi saved ', f2
@@ -591,7 +609,8 @@ def BandpowerFisher(params, RSDPower, kmin = 0, kmax = 10, lmax=4):
         FisherBand_Xi = FisherProjection_Fishergiven(datav_Xi, FisherXi)
         if np.sum(FisherBand_Xi.diagonal()<=0) != 0 : raise ValueError('Inversion Failed')
         #FisherBand_Xi = np.dot(np.dot(datav_Xi, FisherXi), datav_Xi.T)
-        f2 = 'data_txt/cov/'+params['name']+'_bandpower_Xi.fisher'
+        #f2 = params['savedir']'bandpower_Xi.fisher'
+        f2 = params['savedir']+'bandpowerXi_fisher.txt'
         np.savetxt(f2, FisherBand_Xi)
         params['fisher_bandpower_Xi_filename']= f2   
         print 'Fisher_bandpower_Xi saved ', f2
@@ -627,7 +646,8 @@ def BandpowerFisher(params, RSDPower, kmin = 0, kmax = 10, lmax=4):
         #print 'FisherBand_tot diagonal test', np.sum(FisherBand_tot.diagonal() <0)
         ## if np.sum(FisherBand_tot.diagonal()<0) != 0 : raise ValueError('Inversion Failed')
 
-        f3 = 'data_txt/cov/'+params['name']+'_bandpower_tot.fisher'
+        #f3 = params['savedir']'bandpower_tot.fisher'
+        f3 = params['savedir']+'bandpower_tot_fisher.txt'
         np.savetxt(f3, FisherBand_tot)
         params['fisher_bandpower_tot_filename']= f3
         print 'Fishertot saved ', f3
@@ -796,8 +816,10 @@ def DirectProjection_to_params(params, RSDPower, parameter =[0,1,2,3], kmin = 0,
     ind = np.arange(0,(len(parameter))**2)
     if diffs == True : ind = np.arange(0,(len(parameter)+1)**2)
     DAT = np.column_stack((ind, F_params_P.ravel(), F_params_Xi.ravel(), F_params_tot.ravel() ))
-    np.savetxt('data_txt/'+params['name']+'_fisher_params_direct.txt', DAT)
-    print 'save to', 'data_txt/'+params['name']+'_fisher_params_direct.txt'
+    #f = params['savedir']+'fisher_params_direct.txt'
+    f = params['savedir']+'fisher_params_direct.txt'
+    np.savetxt(f, DAT)
+    print 'save to', f
     
 
 
@@ -824,7 +846,8 @@ def Calculate_Fisher_tot(params, RSDPower, kmin = 0, kmax = 2, lmax = 4):
             FisherP = masking(RSDPower, DiagonalBlockwiseInversion3x3(*tuple(covPPlist)), kmin=kmin, kmax=kmax, lmax=lmax)
         else : ValueError('l should be 0, 2 or 4')
       
-        f = 'data_txt/cov/'+params['name']+'_bandpower_PP.fisher'
+        #f = params['savedir']'bandpower_PP.fisher'
+        f = params['savedir']+'bandpowerP_fisher.txt'
         np.savetxt(f, FisherP)
         params['fisher_bandpower_P_filename']= f
         print '\nFisherP saved ', f
@@ -838,7 +861,8 @@ def Calculate_Fisher_tot(params, RSDPower, kmin = 0, kmax = 2, lmax = 4):
     if 'fisherXi_filename' not in params: 
         FisherXi = pinv(covXi, rcond=1e-30)
         if np.sum(FisherXi.diagonal() < 0) != 0: raise ValueError('Inversion Failed')
-        f2 = 'data_txt/cov/'+params['name']+'_Xi.fisher'
+        #f2 = params['savedir']'Xi.fisher'
+        f2 = params['savedir']+'Xi_fisher.txt'
         np.savetxt(f2, FisherXi)
         params['fisherXi_filename']= f2  
         print 'FisherXi saved ', f2
@@ -865,7 +889,7 @@ def Calculate_Fisher_tot(params, RSDPower, kmin = 0, kmax = 2, lmax = 4):
         Fisher3_tot = np.vstack(( np.hstack(( Fa, Fb )), np.hstack(( Fc, Fd )) ))
         print 'Fisher3_tot diagonal check ',  np.sum(Fisher3_tot.diagonal() < 0)
         if np.sum(Fisher3_tot.diagonal() < 0) != 0: raise ValueError('Inversion Failed')
-        f3 = 'data_txt/cov/'+params['name']+'_fishertot.fisher' 
+        f3 = params['savedir']+'fishertot.fisher' 
         params['fishertot_filename']= f3 
         np.savetxt(f3, Fisher3_tot)
         print 'Fisher3_tot saved', f3
@@ -929,7 +953,7 @@ def DirectProjection_to_params_shotnoise(params, RSDPower, p_parameter =[0,1,2,3
             FisherP = masking(RSDPower, DiagonalBlockwiseInversion3x3(*tuple(covPPlist)), kmin=kmin, kmax=kmax, lmax=lmax)
         else : ValueError('l should be 0, 2 or 4')
       
-        f = 'data_txt/cov/'+params['name']+'_bandpower_PP.fisher'
+        f = params['savedir']+'bandpower_PP.fisher'
         np.savetxt(f, FisherP)
         params['fisher_bandpower_P_filename']= f
         print 'FisherP saved ', f
@@ -946,7 +970,7 @@ def DirectProjection_to_params_shotnoise(params, RSDPower, p_parameter =[0,1,2,3
     if 'fisherXi_filename' not in params: 
         FisherXi = pinv(covXi, rcond=1e-30)
         if np.sum(FisherXi.diagonal() < 0) != 0: raise ValueError('Inversion Failed')
-        f2 = 'data_txt/cov/'+params['name']+'_Xi.fisher'
+        f2 = params['savedir']+'Xi.fisher'
         np.savetxt(f2, FisherXi)
         params['fisherXi_filename']= f2  
         
@@ -975,7 +999,7 @@ def DirectProjection_to_params_shotnoise(params, RSDPower, p_parameter =[0,1,2,3
 
         Fisher3_tot = np.vstack(( np.hstack(( Fa, Fb )), np.hstack(( Fc, Fd )) ))
         if np.sum(Fisher3_tot.diagonal() < 0) != 0: raise ValueError('Inversion Failed')
-        f3 = 'data_txt/cov/'+params['name']+'_fishertot.fisher' 
+        f3 = params['savedir']+'fishertot.fisher' 
         params['fishertot_filename']= f3 
         np.savetxt(f3, Fisher3_tot)
         print 'Fisher3_tot saved', f3
@@ -1012,8 +1036,8 @@ def DirectProjection_to_params_shotnoise(params, RSDPower, p_parameter =[0,1,2,3
     
     ind = np.arange(Fq.shape[0]**2)
     DAT = np.column_stack((ind, Fq.ravel() ))
-    np.savetxt('data_txt/'+params['name']+'_fisher_params_7x7.txt', DAT)
-    print 'save to', 'data_txt/'+params['name']+'_fisher_params_7x7.txt'
+    np.savetxt(params['savedir']+'fisher_params_7x7.txt', DAT)
+    print 'save to', params['savedir']+'fisher_params_7x7.txt'
     
     truth = np.ones(Fq.shape[0])
     #np.array([RSDPower.b, RSDPower.f, RSDPower.s, RSDPower.nn, RSDPower.b, RSDPower.f, RSDPower.s])
@@ -1063,8 +1087,8 @@ def DirectProjection_to_params_shotnoise(params, RSDPower, p_parameter =[0,1,2,3
     #        Fqd4[i][j] = Fqd[i][j]
 
     #DAT = np.column_stack((ind, Fqa.ravel(), Fqd4.ravel(), F_params_tot_q.ravel(), F_params_tot.ravel() ))
-    np.savetxt('data_txt/'+params['name']+'_fisher_params_nn.txt', DAT)
-    print 'save to', 'data_txt/'+params['name']+'_fisher_params_nn.txt'
+    np.savetxt(params['savedir']+'fisher_params_nn.txt', DAT)
+    print 'save to', params['savedir']+'fisher_params_nn.txt'
 
 
     ##### end #########################################
@@ -1073,6 +1097,7 @@ def DirectProjection_to_params_shotnoise(params, RSDPower, p_parameter =[0,1,2,3
 
 def CumulativeSNR(params, RSDPower, kmin=0, kmax=2, lmax=4):
     
+
     
     if lmax == 0 : l = 1
     elif lmax == 2 : l = 2
@@ -1080,15 +1105,16 @@ def CumulativeSNR(params, RSDPower, kmin=0, kmax=2, lmax=4):
     
     from test_SNR import reorderingVector, reordering, _reordering, blockwise
     
-    multipole_p = np.genfromtxt(params['multipole_p_filename'])
+    multipole_p = np.genfromtxt(params['multipole_P_filename'])
+
     datav_multipole_kcut = masking_paramsdatav(RSDPower, multipole_p.reshape(1, multipole_p.size)
                                     , kmin=kmin, kmax=kmax, lmax=lmax)    
     
     datav_multipole = masking_paramsdatav(RSDPower, multipole_p.reshape(1, multipole_p.size)
                                     , lmax=lmax) 
     
-    datav_multipole_kcut_re = reorderingVector(datav_multipole_kcut, lmax=lmax)
-    datav_multipole_re = reorderingVector(datav_multipole, lmax=lmax)
+    datav_multipole_kcut_re = reorderingVector(datav_multipole_kcut, l=l)
+    datav_multipole_re = reorderingVector(datav_multipole, l=l)
     
     
     ## loading fisher matrix
@@ -1102,9 +1128,9 @@ def CumulativeSNR(params, RSDPower, kmin=0, kmax=2, lmax=4):
     Fisher_Xi = np.genfromtxt(params['fisher_bandpower_Xi_filename'])
     Fisher_tot = np.genfromtxt(params['fisher_bandpower_tot_filename'])
     
-    Fisher_P_re = _reordering(Fisher_P, lmax=lmax)
-    Fisher_Xi_re = _reordering(Fisher_Xi, lmax=lmax)
-    Fisher_tot_re = _reordering(Fisher_tot, lmax=lmax)
+    Fisher_P_re = _reordering(Fisher_P, l=l)
+    Fisher_Xi_re = _reordering(Fisher_Xi, l=l)
+    Fisher_tot_re = _reordering(Fisher_tot, l=l)
        
     # calculating SNRP
 
@@ -1131,8 +1157,8 @@ def CumulativeSNR(params, RSDPower, kmin=0, kmax=2, lmax=4):
     
     
     DAT = np.column_stack((kklist, SNRlist_P ))
-    np.savetxt('data_txt/snr/'+params['name']+'_snr_p', DAT)
-    print 'snr data saved to ', 'data_txt/snr/'+params['name']+'_snr_p'
+    np.savetxt(params['savedir']+'snr_p', DAT)
+    print 'snr data saved to ', params['savedir']+'snr_p'
     
     # Xi
     
@@ -1152,8 +1178,8 @@ def CumulativeSNR(params, RSDPower, kmin=0, kmax=2, lmax=4):
 
     SNRlist = np.array(SNRlist[::-1]).ravel()
     DAT = np.column_stack((RSDPower.kcenter_y, SNRlist))
-    np.savetxt('data_txt/snr/'+params['name']+'_snr_xi', DAT)
-    print 'snr data saved to ', 'data_txt/snr/'+params['name']+'_snr_xi'
+    np.savetxt(params['savedir']+'snr_xi', DAT)
+    print 'snr data saved to ', params['savedir']+'snr_xi'
     
     # tot
 
@@ -1172,8 +1198,8 @@ def CumulativeSNR(params, RSDPower, kmin=0, kmax=2, lmax=4):
 
     SNRlist = np.array(SNRlist[::-1]).ravel()
     DAT = np.column_stack((RSDPower.kcenter_y, SNRlist))
-    np.savetxt('data_txt/snr/'+params['name']+'_snr_tot', DAT)
-    print 'snr data saved to ', 'data_txt/snr/'+params['name']+'_snr_tot'
+    np.savetxt(params['savedir']+'snr_tot', DAT)
+    print 'snr data saved to ', params['savedir']+'snr_tot'
     
     #### end #######################################
     
@@ -1209,8 +1235,8 @@ def Fisher_params(params, RSDPower, parameter = [0,1,2,3], kmin=0, kmax=2, lmax=
     
     ind = np.arange(0,len(parameter)**2)
     DAT = np.column_stack((ind, F_params_P.ravel(), F_params_Xi.ravel(), F_params_tot.ravel() ))
-    np.savetxt('data_txt/'+params['name']+'_fisher_params.txt', DAT)
-    print 'file save to ', 'data_txt/'+params['name']+'_fisher_params.txt'
+    np.savetxt(params['savedir']+'fisher_params.txt', DAT)
+    print 'file save to ', params['savedir']+'fisher_params.txt'
                        
                        
     
@@ -1272,8 +1298,8 @@ def Reid_error(params, RSDPower, parameter = [0,1,2,3]):
         errPf.append(np.sqrt(sigma_Pf)/RSDPower.f)
 
     DAT = np.column_stack((rlistP, errPb, errPf))
-    np.savetxt('data_txt/reid/'+params['name']+'_reid_p.txt', DAT)    
-    print 'reid data saved to ', 'data_txt/reid/'+params['name']+'_reid_p.txt'    
+    np.savetxt(params['savedir']+'reid_p.txt', DAT)    
+    print 'reid data saved to ', params['savedir']+'reid_p.txt'    
         
         
     ### from Xi ########################################
@@ -1314,8 +1340,8 @@ def Reid_error(params, RSDPower, parameter = [0,1,2,3]):
         
 
     DAT = np.column_stack((rlist, errb, errf))
-    np.savetxt('data_txt/reid/'+params['name']+'_reid_xi.txt', DAT)
-    print 'reid data saved to ', 'data_txt/reid/'+params['name']+'_reid_xi.txt' 
+    np.savetxt(params['savedir']+'reid_xi.txt', DAT)
+    print 'reid data saved to ', params['savedir']+'reid_xi.txt' 
     
     #### end ###################################
        
@@ -1334,5 +1360,20 @@ if __name__=='__main__':
         sys.exit(1)
 
     params = yaml.load(open(param_file))
+
+    print '-----------------------------------'
+    print ' Run Error Analaysis'
+    print '-----------------------------------'
+
+
+    params['savedir'] = params['savedir']+'/'
+    save_dir = params['savedir']
+
+    if os.path.exists(save_dir) : 
+        print " savedir exists... "
+    else : 
+        print " making savedir... "
+        os.makedirs(save_dir)
+    print ' savedir : ', save_dir
     run_error_analysis(params)
 
