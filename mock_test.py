@@ -72,7 +72,7 @@ def interp_2d( x, y, z):
 # store theory data vector for different bias
 def datavector_bias_2d_interp(cosmo):
 
-    blist = np.linspace(0.5, 3.5, 101)
+    blist = np.linspace(0.5, 3.5, 51)
     print 'Calculate datavector p(b) and xi(b) for b = [{},{}]'.format(blist[0], blist[-1])
     datavlist = []
     datavlist_xi = []
@@ -86,6 +86,8 @@ def datavector_bias_2d_interp(cosmo):
 
     datavlist = np.array(datavlist)
     datavlist_xi = np.array(datavlist_xi)
+
+    #print datavlist.shape, datavlist_xi.shape
     #datavlist_com = np.hstack((datavlist, datavlist_xi  ))
     print 'generate 2D interpolation table'
     datavp_interp = interp_2d( cosmo.kbin, blist, datavlist )
@@ -281,6 +283,7 @@ def getting_sigma_bs( cosmo, b = None, cov = None, datavs = None,
     
     bestfit_b = []
     chi2result = np.zeros(b.size)
+    chi2result_m = []
     for i in range(mockdatavs.shape[0]):
     #for i in range(1):
         print '{}/{} \r'.format(i+1, mockdatavs.shape[0] ),
@@ -293,6 +296,7 @@ def getting_sigma_bs( cosmo, b = None, cov = None, datavs = None,
         maxind = np.argmin(chi2result)
         #print maxind
         bestfit_b.append(b[maxind])
+        chi2result_m.append( chi2result )
         ax.plot(b, chi2result, color = 'grey', alpha = 0.2)
     
     if p : la = 'p only'
@@ -313,7 +317,7 @@ def getting_sigma_bs( cosmo, b = None, cov = None, datavs = None,
     sigma_theory = 1./np.sqrt(np.dot( np.dot( dqdb, covinv), dqdb.T))
     print ' theory :', sigma_theory
     
-    return bestfit_b
+    return bestfit_b, chi2result_m
 
 
 
@@ -366,6 +370,7 @@ def getting_sigma_bs_com( cosmo, b = None, cov = None, datavs = None, mockdatavs
     
     bestfit_b = []
     chi2result = np.zeros(b.size)
+    chi2result_m = []
     for i in range(mockdatavs.shape[0]):
     #for i in range(100):
         print '{}/{} \r'.format(i+1, mockdatavs.shape[0] ),
@@ -375,6 +380,7 @@ def getting_sigma_bs_com( cosmo, b = None, cov = None, datavs = None, mockdatavs
             chi2result[j] = best_chisqr( covinv = covinv, datav=dv, mockv = mv)
         maxind = np.argmin(chi2result)
         bestfit_b.append(b[maxind])
+        chi2result_m.append(chi2result)
         #print chi2result[maxind]
         ax.plot(b, chi2result, color = 'grey', alpha = 0.2)
     ax.plot(b, chi2result, color = 'grey', alpha = 0.2, label = 'p+xi+pxi') 
@@ -389,7 +395,7 @@ def getting_sigma_bs_com( cosmo, b = None, cov = None, datavs = None, mockdatavs
     sigma_theory = 1./np.sqrt(np.dot( np.dot( dqdb, covinv), dqdb.T))
     print ' theory :', sigma_theory
     
-    return bestfit_b
+    return bestfit_b, chi2result_m
 
 
 def getting_sigma_bs_diff( cosmo, b = None, covp = None, covxi = None, 
@@ -436,6 +442,7 @@ def getting_sigma_bs_diff( cosmo, b = None, covp = None, covxi = None,
     chi2result1 = np.zeros(b.size)
     chi2result2 = np.zeros(b.size)
     
+    chi2result_m = []
     fig, ax = plt.subplots()
     for i in range(mockdatavsp.shape[0]):
     #for i in range(10):
@@ -453,6 +460,7 @@ def getting_sigma_bs_diff( cosmo, b = None, covp = None, covxi = None,
             chi2result2[j] = chi2
         maxind = np.argmin(chi2result)
         bestfit_b.append(b[maxind])
+        chi2result_m.append(chi2result)
         #print chi2result[maxind]
         ax.plot(b, chi2result, color = 'grey', alpha = 0.2)
         ax.plot(b, chi2result1, color = 'blue', alpha = 0.2)
@@ -481,7 +489,7 @@ def getting_sigma_bs_diff( cosmo, b = None, covp = None, covxi = None,
     sigma_theory = 1./np.sqrt((Fp+Fx))
     print ' theory :', sigma_theory
     
-    return bestfit_b
+    return bestfit_b, chi2result_m
 
 
 def cross_b(bestfit_b_p, bestfit_b_xi):
