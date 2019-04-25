@@ -89,7 +89,7 @@ from numpy.linalg import pinv as inv
 from multiprocessing import Process, Queue
 #import matplotlib
 #matplotlib.use('Agg')
-#import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt
 from error_analysis_class import *
 from noshellavg import *
 
@@ -299,37 +299,31 @@ def blockwiseInversion( matrix, cutInd ):
 
 
 
-def _reordering( matrix, l=1 ):
+def _reordering( RSDPower, matrix ):
 
     #if cut is None : cut = RSDPower.kcenter_y.size  #len(RSDPower.kcenter)
     
-    cut = matrix.shape[0]/l
+    cut = matrix.shape[0]/3
     part00 = matrix[0:cut, 0:cut]
-    if l >= 2 : 
-        part02 = matrix[0:cut, cut:2*cut]
-        part22 = matrix[cut:2*cut, cut:2*cut]
-    if l == 3 :
-        part04 = matrix[0:cut, 2*cut:]
-        part24 = matrix[cut:2*cut, 2*cut:]
-        part44 = matrix[2*cut:, 2*cut:]
+    part02 = matrix[0:cut, cut:2*cut]
+    part04 = matrix[0:cut, 2*cut:]
+    part22 = matrix[cut:2*cut, cut:2*cut]
+    part24 = matrix[cut:2*cut, 2*cut:]
+    part44 = matrix[2*cut:, 2*cut:]
 
     ReorderedF = np.zeros(( matrix.shape ))
     
-    #if l == 1 : ReorderedF = part00
-    #else : 
     for i in range(cut):
         for j in range(cut):
-            ReorderedF[l*i, l*j] = part00[i,j]
-            if l >=2 :
-                ReorderedF[l*i, l*j+1] = part02[i,j]
-                ReorderedF[l*i+1, l*j] = part02[j,i]
-                ReorderedF[l*i+1, l*j+1] = part22[i,j]
-            if l == 3:
-                ReorderedF[l*i, 3*j+2] = part04[i,j]
-                ReorderedF[l*i+2, l*j] = part04[j,i]
-                ReorderedF[l*i+1, l*j+2] = part24[i,j]
-                ReorderedF[l*i+2, l*j+1] = part24[j,i]
-                ReorderedF[l*i+2, l*j+2] = part44[i,j]
+            ReorderedF[3*i, 3*j] = part00[i,j]
+            ReorderedF[3*i, 3*j+1] = part02[i,j]
+            ReorderedF[3*i+1, 3*j] = part02[j,i]
+            ReorderedF[3*i, 3*j+2] = part04[i,j]
+            ReorderedF[3*i+2, 3*j] = part04[j,i]
+            ReorderedF[3*i+1, 3*j+1] = part22[i,j]
+            ReorderedF[3*i+1, 3*j+2] = part24[i,j]
+            ReorderedF[3*i+2, 3*j+1] = part24[j,i]
+            ReorderedF[3*i+2, 3*j+2] = part44[i,j]
 
     return ReorderedF
 
@@ -375,34 +369,32 @@ def reordering( RSDPower, matrix ):
 
 
     
-def reorderingVector( vector, l = 1 ):
+def reorderingVector( vector ):
     
     #if len(vector) > 1: vector = np.hstack(vector)
         
     try : 
         nx, ny = vector.shape
         ReorderedP = np.zeros((vector.shape))
-        ind = np.arange(0, ny, l)
+        ind = np.arange(0, ny, 3)
 
-        Ny = ny/l
+        Ny = ny/3
         for j in range(Ny):
             for i in range(nx):
                 ReorderedP[i,:][ind] = vector[i][:Ny]
-                if l >= 2 :
-                    ReorderedP[i,:][ind+1] = vector[i][Ny:Ny*2]
-                if l == 3 :
-                    ReorderedP[i,:][ind+2] = vector[i][2*Ny:3*Ny]
+                ReorderedP[i,:][ind+1] = vector[i][Ny:Ny*2]
+                ReorderedP[i,:][ind+2] = vector[i][2*Ny:3*Ny]
 
     except : 
  
-        Nx = vector.size/l
+        Nx = vector.size/3
         ReorderedP = np.zeros((vector.shape))
-        ind = np.arange(0,vector.size, l)
+        ind = np.arange(0,vector.size, 3)
 
-        Nx = vector.size/l
+        Nx = vector.size/3
         ReorderedP[ind] = vector[:Nx]
-        if l >= 2 : ReorderedP[ind+1] = vector[Nx:Nx*2]
-        if l == 3 : ReorderedP[ind+2] = vector[Nx*2:Nx*3]
+        ReorderedP[ind+1] = vector[Nx:Nx*2]
+        ReorderedP[ind+2] = vector[Nx*2:Nx*3]
     
     return ReorderedP
 
