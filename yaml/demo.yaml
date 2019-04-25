@@ -1,27 +1,27 @@
 name : demo
-k : [0.001, 0.2, 500]  #[kmin, kmax, kN]
-r : [10.0, 180, 70]  #[rmin, rmax, rN]
-logscale : False
-parameter_ind : [0,1]
-lmax : 0
-nn : 0.3
+k : [0.01, 0.2, 500]  #[kmin, kmax, kN]
+r : [20, 180, 40]  #[rmin, rmax, rN]
+#logscale : False
+parameter_ind : [0]
+lmax : 2
+nn : 0.0003
+s : 0.0 #3.5
 
-s : 0.0
-#nn : 0.0
+direct_projection : True
+
 # precalculated filename
-#covPP_filename : data_txt/cov/test_bf_k0_025_kN1000_r18_180_rN162_PP.cov # no kmin kmax cut
-#covXi_filename : data_txt/cov/test_bf_k0_025_kN1000_r18_180_rN162_Xi.cov  
-#covPXi_filename : data_txt/cov/test_bf_k0_025_kN1000_r18_180_rN162_PXi.cov # no kmin kmax cut
+#covPP_filename : output_demo/P.cov 
+#covXi_filename : output_demo/Xi.cov  
+#covPXi_filename : output_demo/PXi.cov  
 #multipole_p_filename : data_txt/datav/test_bf_k0_025_kN1000_r18_180_rN162_multipole_p.datavector # no kcut
 #derivative_P_filename : data_txt/datav/test_bf_k0_025_kN1000_r18_180_rN162_P.datavector  # no kcut
 #derivative_Xi_filename : data_txt/datav/test_bf_k0_025_kN1000_r18_180_rN162_Xi.datavector 
-#params_datavector_filename : data_txt/datav/test_bf_k0_025_kN1000_r18_180_rN162_params.datavector #no kmin kmax cut
-
-#fisher_bandpower_P_filename : data_txt/cov/test_bf_k0_025_kN1000_r18_180_rN162_bandpower_PP.fisher # kmin kcut applied
-#fisher_bandpower_Xi_filename : data_txt/cov/test_bf_k0_025_kN1000_r18_180_rN162_bandpower_Xi.fisher
-#fisher_bandpower_tot_filename : data_txt/cov/test_bf_k0_025_kN1000_r18_180_rN162_bandpower_tot.fisher #kmin kcut applied in PP side before projection
+##params_datavector_filename : data_txt/datav/test_bf_k0_025_kN1000_r18_180_rN162_params.datavector #no kmin kmax cut
+#fisher_bandpower_P_filename : output_demo/bandpowerP_fisher.txt 
+#fisher_bandpower_Xi_filename : output_demo/bandpowerXi_fisher.txt 
+#fisher_bandpower_tot_filename : output_demo/bandpower_tot_fisher.txt 
 
 ######## output ##########
 savedir : output_demo
-SNR : 0
-Reid : 1
+SNR : 1
+Reid : 0
