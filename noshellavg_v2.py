@@ -131,7 +131,7 @@ def log_interp(x, y):
 class class_covariance():
 
 
-    def __init__(self, KMIN=1e-04, KMAX=50, RMIN=0.1, RMAX=180, n=20000, n_y = 200, n2=200, b=2, f=0.74, s=3.5, nn=3.0e-04, kscale = 'log', rscale='lin'):
+    def __init__(self, KMIN=1e-04, KMAX=50, RMIN=0.1, RMAX=180, n=20000, n2=200, b=2, f=0.74, s=3.5, nn=3.0e-04, kscale = 'log', rscale='lin'):
 
         """
         class_covariance : class
@@ -188,7 +188,7 @@ class class_covariance():
         
         self.n = n #kN
         self.n2 = n2 #rN
-        self.N_y = n_y #kN_y
+        #self.N_y = N_y #kN_y
     
         self.mPk_file = 'matterpower_z_0.55.dat'
         
@@ -213,8 +213,8 @@ class class_covariance():
             self.dk_y = self.kmax_y - self.kmin_y
             self.dlnk_y = np.log(self.kbin_y[3]/self.kbin_y[2])
             #self.kcenter = (3 * (self.kmax**3 + self.kmax**2 * self.kmin + self.kmax*self.kmin**2 + self.kmin**3))/(4 *(self.kmax**2 + self.kmax * self.kmin + self.kmin**2))
-        """    
-        
+            
+        """
         if rscale is 'lin':
             # r bins setting
             self.rbin, dr = np.linspace(self.RMAX, self.RMIN, self.n2, retstep = True)
@@ -637,10 +637,10 @@ class class_covariance():
         covariance_mutipole_PP = np.zeros((kcenter.size,kcenter.size))
         np.fill_diagonal(covariance_mutipole_PP,covP_diag)
         """      
+
         covP_diag = covP_interp(self.kbin)/(self.kbin * self.dlnk)
         covariance_mutipole_PP = np.zeros((self.kbin.size,self.kbin.size))
         np.fill_diagonal(covariance_mutipole_PP,covP_diag)
-        
         return covariance_mutipole_PP
 
 
@@ -741,7 +741,6 @@ class class_covariance():
         """
 
         kbin = self.kbin
-        #kbin = self.kcenter_y
         rbin = self.rcenter
         rmin = self.rmin
         rmax = self.rmax

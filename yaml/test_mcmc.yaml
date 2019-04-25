@@ -1,12 +1,10 @@
 name : test_mcmc
-savedir : output/test_mcmc_P_nl/
-k : [0.01, 0.2, 500]  #[kmin, kmax, kN]
-r : [0.001, 200, 40]  #[rmin, rmax, rN]
+k : [0.001, 2, 200]  #[kmin, kmax, kN]
+r : [0.001, 180, 51]  #[rmin, rmax, rN]
 logscale : False
 parameter_ind : [0,1,2,3]
-lmax : 2
-matterpower : /n/des/lee.5922/Dropbox/repositories/CMASS/code/cosmology_chuang/Chuang_cosmology_Pm_nl_z059.txt
-generate_datav_only : True
+lmax : 4
+
 ## MCMC parameters
 
 b_range : [0.8, 2, 2.5, 0.2]
@@ -19,7 +17,7 @@ n_threads : 32
 iterations : 10000
 nwalker : 32
 
-probe : ['xi']
+probe : ['p']
 #fisher_filename : data_txt/cov/test_bf_k0_025_kN1000_r18_180_rN162_bandpower_PP.fisher 
 #datav_filename : data_txt/datav/test_bf_k0_025_kN1000_r18_180_rN162_multipole_p.datavector 
 

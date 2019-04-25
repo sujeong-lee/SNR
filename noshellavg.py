@@ -5,7 +5,7 @@ from numpy import vectorize
 from scipy.interpolate import interp1d
 #from scipy.integrate import simps
 import sys
-#import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt
 from scipy_integrate import *
 
 
@@ -260,7 +260,7 @@ class NoShell_covariance():
         self.b= b
         self.f= f 
         self.s= s
-        self.n3 = 2**8 + 1
+        self.n3 = 2**4 + 1
         self.mulist, self.dmu = np.linspace(-1.,1., self.n3, retstep = True)
         
         # k scale range
