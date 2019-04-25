@@ -5,9 +5,9 @@ from numpy import vectorize
 from scipy.interpolate import interp1d
 from scipy.integrate import simps, romb
 import sys
-import matplotlib as mpl
-mpl.use('Agg')
-import matplotlib.pyplot as plt
+#import matplotlib as mpl
+#mpl.use('Agg')
+#import matplotlib.pyplot as plt
 
 
 class Linear_covariance():
