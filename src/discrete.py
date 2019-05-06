@@ -466,6 +466,8 @@ class class_discrete_covariance():
         l : mode (0, 2, 4)
         
         """
+        dlnk = np.log(kbin[3]/kbin[2]) 
+
 
         import cmath
         I = cmath.sqrt(-1)
@@ -504,7 +506,10 @@ class class_discrete_covariance():
         #AvgBessel = np.array([ avgBessel(l, k ,rmin, rmax) for k in kbin ])#/Vir
         AvgBessel = avgBessel(l, kmatrix, rminmatrix, rmaxmatrix )
         #AvgBessel = sbess(l, kmatrix * rmatrix)
+
+
         multipole_xi = np.real(I**l) * simpson(kmatrix**2 * Pmatrix * AvgBessel/(2*np.pi**2), kbin, axis=0)#/Vir
+        #multipole_xi = np.real(I**l) * simpson(kmatrix**3 * Pmatrix * AvgBessel/(2*np.pi**2), dx=dlnk, axis=0)#/Vir
 
         return multipole_xi
     
@@ -522,7 +527,9 @@ class class_discrete_covariance():
         ----------
         l : mode (0, 2, 4)
         
-        """        
+        """    
+        
+
         from fortranfunction import sbess
         sbess = np.vectorize(sbess)
                 
@@ -535,6 +542,7 @@ class class_discrete_covariance():
 
         #klist = self.kbin_y
         #kbin = self.kbin
+        dlnk = np.log(kbin[3]/kbin[2])
 
         rcenter = self.rcenter
         #dr = self.dr
@@ -564,6 +572,7 @@ class class_discrete_covariance():
             for rj in range(rcenter.size):
                 cxill = Cll * Besselmatrix1[:,ri] * Besselmatrix2[:,rj] * kbin**2/(2*np.pi**2)
                 Cxill_matrix[ri,rj] = simpson( cxill, kbin )
+                #Cxill_matrix[ri,rj] = simpson( cxill, dx=dlnk )
                 #print 'cov xi {}/{} \r'.format(i, rcenter.size**2),
                 i+=1
         """
@@ -600,7 +609,8 @@ class class_discrete_covariance():
         else : overnn = 1./self.nn
             
         Vik = 4./3 * np.pi * np.fabs(self.kmax_y**3 - self.kmin_y**3)
-        
+        dlnk = np.log(kbin[3]/kbin[2])
+
         #try : self.Pmultipole0_interp
         #except : self.multipole_P_band_all()
         Pm = p  
@@ -615,11 +625,11 @@ class class_discrete_covariance():
         shellavg_P = np.zeros( self.kcenter_y.size )
         kbin_y_split_ind = np.digitize( kbin, self.kbin_y )
 
-        #print kbin_y_split_ind.min(), kbin_y_split_ind.max()
-        for i in range(len(self.kbin_y)-1):
+        for i in range(len(self.kcenter_y)):
             kbin_i = kbin[ kbin_y_split_ind == i+1 ]
             Pm_i = Pm[ kbin_y_split_ind == i+1 ]
             shellavg_P[i] = simpson( 4*np.pi*kbin_i**2 * Pm_i, kbin_i )/Vik[i]
+            #shellavg_P[i] = simpson( 4*np.pi*kbin_i**3 * Pm_i, dx = dlnk )/Vik[i]
 
         return shellavg_P
 
@@ -748,6 +758,15 @@ class class_discrete_covariance():
         Total = FirstSecond + LastTerm
         #Total = LastTerm
 
+
+        ##--------------------
+        #def shellavg_perbin(self.covpp_interp):
+        #    covP_diag = self.covpp_interp(self.kbin)
+        #    shellavg_covP_diag = self.shellavg_k(self.kbin, covP_diag)
+        #    shellavg_covP_diag_perbinsize = shellavg_covP_diag / self.dk_y  
+        #    return shellavg_covP_diag_perbinsize        
+        ##--------------------
+
         if l1 == 0 : 
             if l2 == 0 : 
                 self.covP00_interp = linear_interp(kbin, Total)
@@ -784,18 +803,18 @@ class class_discrete_covariance():
         np.fill_diagonal(covariance_mutipole_PP,covP_diag)
         """     
 
-
         #Vi = 4./3 * pi * ( self.kmax_y**3 - self.kmin_y**3 ) 
         #covP_diag = covP_interp(self.kbin)/(self.kbin * self.dlnk)
         #covariance_mutipole_PP = np.zeros((self.kbin.size,self.kbin.size))
-        
+
+        ## -----------------------
         covP_diag = covP_interp(self.kbin)
         shellavg_covP_diag = self.shellavg_k(self.kbin, covP_diag)
-        binsize = self.dk_y #self.kmax_y - self.kmin_y
+        binsize = self.dk_y #4*np.pi*self.kcenter_y**2 * self.dk_y #self.dk_y #self.kmax_y - self.kmin_y
         shellavg_covP_diag_perbinsize = shellavg_covP_diag / binsize
         covariance_mutipole_PP = np.zeros((self.kcenter_y.size,self.kcenter_y.size))
         np.fill_diagonal(covariance_mutipole_PP,shellavg_covP_diag_perbinsize)
-        
+        ## ------------------------
         return covariance_mutipole_PP
 
 
@@ -877,7 +896,8 @@ class class_discrete_covariance():
             
         if l1 == 0 :
             if l2 == 0 : 
-                Cll = self.covP00_interp(kbin)# -covPP_LastTerm
+                #Cll = self.covP00_interp(kbin)# -covPP_LastTerm
+                Cll = self.covP00_interp(kbin)
             elif l2 == 2 : 
                 Cll = self.covP02_interp(kbin)
             else : 
@@ -901,12 +921,81 @@ class class_discrete_covariance():
         else : raise ValueError('l should be 0,2,4')
 
 
+
         covp_diag = Cll *4*np.pi*kbin**2 /(2*np.pi)**3 
         
         #shellavg_covp_diag = self.shellavg_k(kbin, covp_diag)
         #binsize = self.kmax_y - self.kmin_y
         #shellavg_covp_diag_perbinsize = shellavg_covp_diag / binsize
-        covxi = self.fourier_transform_kr1r2(l1, l2, kbin, covp_diag)
+        LastTerm_fourier = 0
+        LastTerm = 0
+        """
+        if self.nn == 0 :
+            LastTerm_fourier = 0
+            LastTerm = 0
+        else : 
+            if l1 == l2:
+                LastTerm_fourier = 2. * self.Vs/self.nn**2 
+                Vir = 4./3 * np.pi * np.fabs(self.rmax**3 - self.rmin**3)
+                LastTerm = 2./(self.Vs*self.nn**2)/Vir
+            else : 
+                LastTerm_fourier = 0
+                LastTerm = 0
+        """
+        covxi = self.fourier_transform_kr1r2(l1, l2, kbin, covp_diag-LastTerm_fourier)
+        covxi += LastTerm
+        return covxi
+
+
+    def covariance_Xi_perbinsize(self, l1, l2):
+
+        """
+        Covariance Xi(r1, r2)
+
+        Calculate cov_xi matrix from cov_p by double bessel fourier transform. 
+        self.covariance_PP(l1, l2) should be called first. 
+
+        """
+
+        kbin = self.kbin
+
+        try : self.covP00_interp(1.0)
+        except : self.covariance_PP(l1, l2)
+            
+        if l1 == 0 :
+            if l2 == 0 : 
+                #Cll = self.covP00_interp(kbin)# -covPP_LastTerm
+                Cll = self.covariance_PP00.diagonal()
+            elif l2 == 2 : 
+                Cll = self.covariance_PP02.diagonal()
+            else : 
+                Cll = self.covariance_PP04.diagonal()
+        elif l1 == 2 :
+            if l2 == 0 : 
+                Cll = self.covariance_PP02.diagonal()
+            elif l2 == 2 : 
+                Cll = self.covariance_PP22.diagonal()# -covPP_LastTerm
+            elif l2 == 4 : 
+                Cll = self.covariance_PP24.diagonal()
+            else : raise ValueError
+        elif l1 == 4 :
+            if l2 == 0 : 
+                Cll = self.covariance_PP04.diagonal()
+            elif l2 == 2 : 
+                Cll = self.covariance_PP24.diagonal()
+            elif l2 == 4 : 
+                Cll = self.covariance_PP44.diagonal()# -covPP_LastTerm
+            else : raise ValueError
+        else : raise ValueError('l should be 0,2,4')
+
+
+
+        covp_diag = Cll *4*np.pi*self.kcenter_y**2 /(2*np.pi)**3 
+        
+        #shellavg_covp_diag = self.shellavg_k(kbin, covp_diag)
+        #binsize = self.kmax_y - self.kmin_y
+        #shellavg_covp_diag_perbinsize = shellavg_covp_diag / binsize
+        covxi = self.fourier_transform_kr1r2(l1, l2, self.kcenter_y, covp_diag)
 
         return covxi
 
@@ -1027,7 +1116,7 @@ class class_discrete_covariance():
         for i in range(rbin.size):
             covpxi_diag = covp_diag * Besselmatrix[:,0]
             shellavg_covpxi_diag = self.shellavg_k( kbin, covpxi_diag ) * Vik
-            binsize = self.dk_y #self.kmax_y - self.kmin_y
+            binsize = self.dk_y #4*np.pi*self.kcenter_y**2 * self.dk_y #self.dk_y #self.kmax_y - self.kmin_y
             shellavg_covpxi_diag_perbinsize = shellavg_covpxi_diag / binsize
             Cllmatrix[:,i] = shellavg_covpxi_diag_perbinsize
 

@@ -1,6 +1,6 @@
 import time, datetime
 import sys, os
-
+import fitsio
 import numpy as np
 from numpy import zeros, sqrt, pi, vectorize
 from numpy.linalg import pinv, inv
@@ -22,7 +22,7 @@ def run_error_analysis(params):
     kmin, kmax, kN = params['k']
     rmin, rmax, rN = params['r']
     #logscale = params['logscale']
-    KMIN, KMAX = 1e-04, 2.
+    KMIN, KMAX = 1e-04, 10.
     lmax = params['lmax']
     parameter_ind = params['parameter_ind']  
     #parameter_ind_xi = params['parameter_ind_xi'] 
@@ -37,6 +37,8 @@ def run_error_analysis(params):
     if 'nn' in params: nn = params['nn']
     parameter_names = np.array(['b', 'f', 's', 'nn'])
     
+    params['parameter'] = str(parameter_names[parameter_ind]) 
+
     #print '-----------------------------------'
     #print ' Run Error Analaysis'
     #print '-----------------------------------'
@@ -52,7 +54,12 @@ def run_error_analysis(params):
     RSDPower = class_discrete_covariance(KMIN=KMIN, KMAX=KMAX, RMIN=rmin, RMAX=rmax, n=20000, n_y = kN, n2=rN, b=b, f=f,
      s=s, nn=nn, kscale = 'log', rscale='lin')
     RSDPower.mPk_file = 'src/matterpower_z_0.59.dat'
-    
+
+    params['kbin'] = RSDPower.kbin_y
+    params['kcenter'] = RSDPower.kcenter_y
+    params['rbin'] = RSDPower.rbin
+    params['rcenter'] = RSDPower.rcenter
+
     Covariance_matrix(params, RSDPower)
     Calculate_Fisher_tot(params, RSDPower, kmin = kmin, kmax = kmax, lmax=lmax)
     
@@ -97,11 +104,11 @@ def run_error_analysis(params):
         
     
     BandpowerFisher(params, RSDPower, kmin = kmin, kmax = kmax, lmax = lmax) 
-    #Fisher_params(params, RSDPower, parameter = parameter_ind, kmin=kmin, kmax=kmax, lmax=lmax)
+    Fisher_params(params, RSDPower, parameter = parameter_ind, kmin=kmin, kmax=kmax, lmax=lmax)
     
     direct_projection = 0
     if 'direct_projection' in params:
-        direct_projection = params['direct_projection']
+        direct_projection = params
     if direct_projection :
         if 'params_xi_datavector_filename' not in params:
             params_xi_datavector(params, RSDPower)
@@ -121,7 +128,8 @@ def run_error_analysis(params):
         Reid_error(params, RSDPower, parameter = parameter_ind)
     
     
-    print '\n------------------ end ---------------------'
+    #fitsio.write( params['savedir']+'output.fits', params, clobber=True )
+    
 
     
 def Covariance_matrix(params, RSDPower):    
@@ -420,7 +428,7 @@ def masking_datav(RSDPower, data, kmin = 0, kmax = 2, lmax = 4, xi=False):
 
 
     
-def masking(RSDPower, data, kmin = None, kmax = None, lmax = 4, xi=False):
+def masking(RSDPower, data, kmin = None, kmax = None, lmax = 4, xi=False, pxi=False):
     
     if xi is True : kcut_min, kcut_max = 0, RSDPower.rcenter.size
     else :
@@ -438,27 +446,8 @@ def masking(RSDPower, data, kmin = None, kmax = None, lmax = 4, xi=False):
 
     mask2[:l*Nx/3,:l*Ny/3] = 1
 
-    if Nx == Ny : 
-        
-        mask0_x, mask0_y = np.zeros((Nx/3, Nx/3), dtype=bool), np.zeros((Nx/3, Nx/3), dtype=bool)
-        mask0_x[:,kcut_min:kcut_max+1] = 1
-        mask0_y[kcut_min:kcut_max+1,:] = 1
-        mask0 = mask0_x*mask0_y
-
-        mask1 = np.hstack([mask0, mask0, mask0])
-        #print mask0.shape, mask1.shape, mask2.shape
-        #print mask2.shape, mask1.shape 
-        
-        #if lmax == 0 : mask = mask1 * mask2
-        #elif lmax == 2 : mask = np.vstack([mask1, mask1]) * mask2
-        #elif lmax == 4: 
-        mask = np.vstack([mask1, mask1, mask1]) * mask2
-        data = data[mask]
-        nx = int(np.sqrt(data.size))
-        ny = nx
-
-        
-    elif Nx != Ny :    
+    if pxi:  
+    #elif Nx != Ny :  
         mask0 = np.zeros((Nx/3, Ny/3), dtype=bool)
         #print 'mask0', mask0.shape
 
@@ -470,9 +459,32 @@ def masking(RSDPower, data, kmin = None, kmax = None, lmax = 4, xi=False):
         #elif lmax == 4 :
         mask1 = np.hstack((mask0, mask0, mask0))
         mask = np.vstack([mask1, mask1, mask1]) * mask2
+
+        
+
         data = data[mask]
         ny = Ny/3 * l
         nx = data.size/ny
+
+    #if Nx == Ny : 
+    else:    
+        mask0_x, mask0_y = np.zeros((Nx/3, Nx/3), dtype=bool), np.zeros((Nx/3, Nx/3), dtype=bool)
+        mask0_x[:,kcut_min:kcut_max+1] = 1
+        mask0_y[kcut_min:kcut_max+1,:] = 1
+        mask0 = mask0_x*mask0_y
+
+        mask1 = np.hstack([mask0, mask0, mask0])
+        #print mask1.shape, mask2.shape
+        #print mask0.shape, mask1.shape, mask2.shape
+        #print mask2.shape, mask1.shape 
+        
+        #if lmax == 0 : mask = mask1 * mask2
+        #elif lmax == 2 : mask = np.vstack([mask1, mask1]) * mask2
+        #elif lmax == 4: 
+        mask = np.vstack([mask1, mask1, mask1]) * mask2
+        data = data[mask]
+        nx = int(np.sqrt(data.size))
+        ny = nx
         
     return data.reshape(nx, ny)
 
@@ -563,7 +575,7 @@ def BandpowerFisher(params, RSDPower, kmin = 0, kmax = 10, lmax=4):
     covPP = np.genfromtxt(params['covPP_filename'])
     covPP_masked = masking(RSDPower, covPP, kmin = kmin, kmax = kmax, lmax=lmax)
     covXi = masking(RSDPower, np.genfromtxt(params['covXi_filename']), xi=True, lmax=lmax)
-    covPXi = masking(RSDPower, np.genfromtxt(params['covPXi_filename']), kmin = kmin, kmax = kmax, lmax=lmax)
+    covPXi = masking(RSDPower, np.genfromtxt(params['covPXi_filename']), kmin = kmin, kmax = kmax, lmax=lmax, pxi=True)
     #print 'covariance matrix size', covPP_masked.shape, covXi.shape, covPXi.shape 
     
     
@@ -841,7 +853,7 @@ def DirectProjection_to_params(params, RSDPower, parameter =[0,1,2,3], kmin = 0,
 
 
     
-def Calculate_Fisher_tot(params, RSDPower, kmin = 0, kmax = 2, lmax = 4):
+def Calculate_Fisher_tot(params, RSDPower, kmin = None, kmax = None, lmax = 4):
     ## calling stored cov and datavector
     covPP = np.genfromtxt(params['covPP_filename'])
     #print 'covp', covPP.shape
@@ -855,11 +867,11 @@ def Calculate_Fisher_tot(params, RSDPower, kmin = 0, kmax = 2, lmax = 4):
     covXi = masking(RSDPower, np.genfromtxt(params['covXi_filename']), xi=True, lmax=lmax)
     
     #covPXi_ = np.genfromtxt(params['covPXi_filename'])
-    #print 'covpxi', covPXi_.shape
+    #print 'covxi', covXi.shape
 
-    covPXi = masking(RSDPower, np.genfromtxt(params['covPXi_filename']), kmin = kmin, kmax = kmax, lmax=lmax)
+    covPXi = masking(RSDPower, np.genfromtxt(params['covPXi_filename']), kmin = kmin, kmax = kmax, lmax=lmax, pxi=True)
 
-    #print covPXi_.shape
+    #print 'covpxi', covPXi.shape
 
 
     if 'fisher_bandpower_P_filename' not in params: 
@@ -908,7 +920,7 @@ def Calculate_Fisher_tot(params, RSDPower, kmin = 0, kmax = 2, lmax = 4):
         b = covPXi
         c = covPXi.T #matrix[cutInd+1:, 0:cutInd+1]
         d = covXi
-        ia = FisherP#masking(RSDPower, FisherP, kmin=kmin, kmax=kmax, lmax=lmax)
+        ia = FisherP #masking(RSDPower, FisherP, kmin=kmin, kmax=kmax, lmax=lmax)
 
         Fd = pinv( d - np.dot( np.dot( c, ia ), b) )
         Fc = - np.dot( np.dot( Fd, c), ia)
@@ -928,14 +940,14 @@ def Calculate_Fisher_tot(params, RSDPower, kmin = 0, kmax = 2, lmax = 4):
         
         
     
-def DirectProjection_to_params_shotnoise(params, RSDPower, p_parameter =[0,1,2,3], xi_parameter =[0,1,2,3], kmin = 0, kmax = 2, lmax = 4):
+def DirectProjection_to_params_shotnoise(params, RSDPower, p_parameter =[0,1,2,3], xi_parameter =[0,1,2,3], kmin = None, kmax = None, lmax = 4):
     
     print '\nDirect Projection\n'
     ## calling stored cov and datavector
     covPP = np.genfromtxt(params['covPP_filename'])
     covPP_masked = masking(RSDPower, covPP, kmin=kmin, kmax=kmax, lmax=lmax)
     covXi = masking(RSDPower, np.genfromtxt(params['covXi_filename']), xi=True, lmax=lmax)
-    covPXi = masking(RSDPower, np.genfromtxt(params['covPXi_filename']), kmin = kmin, kmax = kmax, lmax=lmax)
+    covPXi = masking(RSDPower, np.genfromtxt(params['covPXi_filename']), kmin = kmin, kmax = kmax, lmax=lmax, pxi=True)
     
     #covPP_masked = masking(RSDPower, covPP, kmin = kmin, kmax = kmax)
     #C_tot = np.concatenate((np.concatenate((covPP_masked, covPXi), axis=1),
@@ -1110,13 +1122,15 @@ def DirectProjection_to_params_shotnoise(params, RSDPower, p_parameter =[0,1,2,3
     ind = np.arange(0,(len(p_parameter))**2)
     #if dinns == True : ind = np.arange(0,(len(p_parameter)+1)**2)
     DAT = np.column_stack((ind, F_params_P.ravel(), F_params_Xi.ravel(), F_params_tot.ravel()))
-    
+
     
     from numpy.linalg import pinv as inv
     sigP = np.sqrt(inv( F_params_P ).diagonal())
     sigXi = np.sqrt(inv( F_params_Xi ).diagonal())
     sigtot = np.sqrt(inv( F_params_tot ).diagonal())
     sigdiff = np.sqrt(inv( F_params_P + F_params_Xi ).diagonal())
+
+
 
     parameter_name = ['b', 'f', 's', 'nn']
 
@@ -1136,11 +1150,32 @@ def DirectProjection_to_params_shotnoise(params, RSDPower, p_parameter =[0,1,2,3
     print '\nsave to', params['savedir']+'fisher_params_nn.txt'
 
 
+    
+
+    #import fitsio
+
+    #params = {}
+    params['fisher_params_p'] = F_params_P
+    params['fisher_params_Xi'] = F_params_Xi
+    params['fisher_params_tot'] = F_params_tot
+
+    params['cov_params_p'] = inv(F_params_P)
+    params['cov_params_Xi'] = inv(F_params_Xi)
+    params['cov_params_tot'] = inv(F_params_tot)
+    params['cov_params_diff'] =  inv(F_params_P+F_params_Xi)
+
+    params['sigma_params_p'] = sigP 
+    params['sigma_params_Xi'] = sigXi
+    params['sigma_params_tot'] = sigtot 
+    params['sigma_params_diff'] = sigdiff
+
+    #fitsio.write( params['savedir']+'output.fits', params, clobber=True )
+
     ##### end #########################################
 
 
 
-def CumulativeSNR(params, RSDPower, kmin=0, kmax=2, lmax=4):
+def CumulativeSNR(params, RSDPower, kmin=None, kmax=None, lmax=4):
     
 
     
@@ -1247,7 +1282,7 @@ def CumulativeSNR(params, RSDPower, kmin=0, kmax=2, lmax=4):
     
     
     
-def Fisher_params(params, RSDPower, parameter = [0,1,2,3], kmin=0, kmax=2, lmax=4):
+def Fisher_params(params, RSDPower, parameter = [0,1,2,3], kmin=None, kmax=None, lmax=4):
     
     """
     parameter : parameter index that you want to include in Fisher matrix
@@ -1419,6 +1454,40 @@ def Reid_error(params, RSDPower, parameter = [0,1,2,3]):
     #### end ###################################
        
 
+def save_data_to_fits(params):
+
+    
+    ResultDic = {}
+    """
+    ResultDic['kcenter']
+    ResultDic['kbin']
+    ResultDic['rcenter']
+    ResultDic['rbin']
+
+    ResultDic['rbin']
+    ResultDic['rbin']
+    ResultDic['rbin']
+    ResultDic['rbin']
+    """
+    ResultDic['fisher_params_p'] = params['fisher_params_p']
+    ResultDic['fisher_params_Xi'] = params['fisher_params_Xi']
+    ResultDic['fisher_params_tot'] = params['fisher_params_tot']
+
+    ResultDic['cov_params_p'] = params['cov_params_p']
+    ResultDic['cov_params_Xi'] = params['cov_params_Xi'] 
+    ResultDic['cov_params_tot'] = params['cov_params_tot'] 
+    ResultDic['cov_params_diff'] = params['cov_params_diff'] 
+
+    ResultDic['sigma_params_p'] = params['sigma_params_p'] 
+    ResultDic['sigma_params_Xi'] = params['sigma_params_Xi'] 
+    ResultDic['sigma_params_tot'] = params['sigma_params_tot'] 
+    ResultDic['sigma_params_diff'] = params['sigma_params_diff'] 
+    
+    fitsname = params['savedir']+'output.fits'
+    fitsio.write(fitsname, ResultDic, clobber=True)
+    print 'save to ', fitsname
+
+    return 0
 
                         
 ########## main #######
@@ -1449,4 +1518,6 @@ if __name__=='__main__':
         os.makedirs(save_dir)
     print ' savedir : ', save_dir
     run_error_analysis(params)
+    save_data_to_fits(params)
+    print '\n------------------ end ---------------------'
 
