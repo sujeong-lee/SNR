@@ -1,0 +1,36 @@
+name : nn
+k : [0.001, 2, 200]  #[kmin, kmax, kN]
+r : [0.1, 200, 50]  #[rmin, rmax, rN]
+#logscale : False
+parameter_ind : [0,1,2,3]
+lmax : 4
+
+b : 2
+f : 0.74
+s : 3.5
+nn : 0.0003
+
+
+probe : ['p','xi','com']
+direct_projection : True
+
+# precalculated filename
+covPP_filename : output_full/P.cov 
+covXi_filename : output_full/Xi.cov  
+covPXi_filename : output_full/PXi.cov  
+#multipole_p_filename : output_demo3/multipole_p.datavector #data_txt/datav/test_bf_k0_025_kN1000_r18_180_rN162_multipole_p.datavector # no kcut
+#derivative_P_filename : output_demo3/DP_datavector.txt #data_txt/datav/test_bf_k0_025_kN1000_r18_180_rN162_P.datavector  # no kcut
+#derivative_Xi_filename : output_demo3/DXi_datavector.txt #data_txt/datav/test_bf_k0_025_kN1000_r18_180_rN162_Xi.datavector 
+#params_datavector_filename : output_demo3/DP_params_datavector.txt #data_txt/datav/test_bf_k0_025_kN1000_r18_180_rN162_params.datavector #no kmin kmax cut
+#params_xi_datavector_filename : output_demo3/DXi_params_datavector.txt
+#fisher_bandpower_P_filename : output_demo3/bandpowerP_fisher.txt 
+#fisher_bandpower_Xi_filename : output_demo3/bandpowerXi_fisher.txt 
+#fisher_bandpower_tot_filename : output_demo3/bandpower_tot_fisher.txt 
+
+######## output ##########
+savedir : output_full
+SNR : 1
+Reid : 0
+
+#Calculate sigma_p only 
+#R ~ 10~60 sensitive. sigma_v doesn't work properly

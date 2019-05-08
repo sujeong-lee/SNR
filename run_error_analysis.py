@@ -52,7 +52,7 @@ def run_error_analysis(params):
     
     #RSDPower = NoShell_covariance(KMIN, KMAX, rmin, rmax, 2**12 + 1, rN, kN, b,f,s,nn,logscale = logscale)
     RSDPower = class_discrete_covariance(KMIN=KMIN, KMAX=KMAX, RMIN=rmin, RMAX=rmax, n=20000, n_y = kN, n2=rN, b=b, f=f,
-     s=s, nn=nn, kscale = 'log', rscale='log')
+     s=s, nn=nn, kscale = 'log', rscale='lin')
     RSDPower.mPk_file = 'src/matterpower_z_0.55.dat'
 
     kcut_min = get_closest_index_in_data( kmin, RSDPower.kmin_y )   
@@ -629,7 +629,7 @@ def BandpowerFisher(params, RSDPower, kmin = 0, kmax = 10, lmax=4):
         print '\nUse Precalculated FisherP ', params['fisher_bandpower_P_filename']
         
     if 'fisher_bandpower_Xi_filename' not in params:
-        FisherXi = pinv(covXi, rcond=1e-15)
+        FisherXi = pinv(covXi, rcond=1e-30)
         if np.sum(FisherXi.diagonal()<=0) != 0 : raise ValueError('Inversion Failed')
             
         #f2 = params['savedir']'Xi.fisher'
@@ -810,7 +810,7 @@ def DirectProjection_to_params(params, RSDPower, parameter =[0,1,2,3], kmin = 0,
     
     
     
-    if 'fisherXi_filename' not in params: FisherXi = pinv(covXi, rcond=1e-15)
+    if 'fisherXi_filename' not in params: FisherXi = pinv(covXi, rcond=1e-30)
     else : FisherXi = np.genfromtxt(params['fisherXi_filename'])
     if np.sum(FisherXi.diagonal() < 0) != 0 : 
         raise ValueError(' Inversion Failed! ')
@@ -892,9 +892,9 @@ def Calculate_Fisher_tot(params, RSDPower, kmin = None, kmax = None, lmax = 4):
             FisherP = inv(covPP_masked)
         elif lmax == 4 :  
             cut = RSDPower.kcenter_y.size
-            covPPlist = [covPP[:cut, :cut], covPP[:cut, cut:2*cut], covPP[:cut, 2*cut:],
+            covPPlist = [covPP[:cut, :cut],      covPP[:cut, cut:2*cut],      covPP[:cut, 2*cut:],
                          covPP[:cut, cut:2*cut], covPP[cut:2*cut, cut:2*cut], covPP[cut:2*cut, 2*cut:], 
-                         covPP[:cut, 2*cut:], covPP[cut:2*cut, 2*cut:], covPP[2*cut:, 2*cut:]]
+                         covPP[:cut, 2*cut:],    covPP[cut:2*cut, 2*cut:],    covPP[2*cut:, 2*cut:]]
             FisherP = masking(RSDPower, DiagonalBlockwiseInversion3x3(*tuple(covPPlist)), kmin=kmin, kmax=kmax, lmax=lmax)
         else : ValueError('l should be 0, 2 or 4')
       
@@ -932,13 +932,13 @@ def Calculate_Fisher_tot(params, RSDPower, kmin = None, kmax = None, lmax = 4):
             d = covXi
             ia = FisherP #masking(RSDPower, FisherP, kmin=kmin, kmax=kmax, lmax=lmax)
 
-            Fd = pinv( d - np.dot( np.dot( c, ia ), b), rcond=1e-10 )
+            Fd = pinv( d - np.dot( np.dot( c, ia ), b), rcond=1e-30 )
             Fc = - np.dot( np.dot( Fd, c), ia)
             Fb = - np.dot( np.dot( ia, b ), Fd )
             Fa = ia + np.dot( np.dot (np.dot( np.dot( ia, b), Fd ), c), ia)
 
             Fisher3_tot = np.vstack(( np.hstack(( Fa, Fb )), np.hstack(( Fc, Fd )) ))
-            print 'Fisher3_tot diagonal check ',  np.sum(Fisher3_tot.diagonal() < 0)
+            print 'Fisher3_tot diagonal check ',  np.sum(Fisher3_tot.diagonal() < 0), np.sum(Fd.diagonal() < 0), np.sum(Fa.diagonal() < 0)
             if np.sum(Fisher3_tot.diagonal() < 0) != 0: raise ValueError('Inversion Failed')
             f3 = params['savedir']+'fishertot.fisher' 
             params['fishertot_filename']= f3 
@@ -1019,7 +1019,7 @@ def DirectProjection_to_params_shotnoise(params, RSDPower, p_parameter =[0,1,2,3
     #print 'F-params_p\n', F_params_P
     
     if 'fisherXi_filename' not in params: 
-        FisherXi = pinv(covXi, rcond=1e-15)
+        FisherXi = pinv(covXi, rcond=1e-30)
         if np.sum(FisherXi.diagonal() < 0) != 0: raise ValueError('Inversion Failed')
         f2 = params['savedir']+'Xi.fisher'
         np.savetxt(f2, FisherXi)
@@ -1088,20 +1088,20 @@ def DirectProjection_to_params_shotnoise(params, RSDPower, p_parameter =[0,1,2,3
     #print '\nsave to', params['savedir']+'fisher_params_nn.txt'
     
     params['fisher_params_p_direct'] = F_params_P
-    params['fisher_params_Xi_p_direct'] = F_params_Xi
+    params['fisher_params_Xi_direct'] = F_params_Xi
 
-    params['cov_params_p_p_direct'] = inv(F_params_P)
-    params['cov_params_Xi_p_direct'] = inv(F_params_Xi)
-    params['cov_params_diff_p_direct'] =  inv(F_params_P+F_params_Xi)
+    params['cov_params_p_direct'] = inv(F_params_P)
+    params['cov_params_Xi_direct'] = inv(F_params_Xi)
+    params['cov_params_diff_direct'] =  inv(F_params_P+F_params_Xi)
 
-    params['sigma_params_p_p_direct'] = sigP 
-    params['sigma_params_Xi_p_direct'] = sigXi
-    params['sigma_params_diff_p_direct'] = sigdiff
+    params['sigma_params_p_direct'] = sigP 
+    params['sigma_params_Xi_direct'] = sigXi
+    params['sigma_params_diff_direct'] = sigdiff
 
     if 'com' in params['probe']:
-        params['fisher_params_tot_p_direct'] = F_params_tot
-        params['cov_params_tot_p_direct'] = inv(F_params_tot)
-        params['sigma_params_tot_p_direct'] = sigtot 
+        params['fisher_params_tot_direct'] = F_params_tot
+        params['cov_params_tot_direct'] = inv(F_params_tot)
+        params['sigma_params_tot_direct'] = sigtot 
         #fitsio.write( params['savedir']+'output.fits', params, clobber=True )
     
 
@@ -1450,6 +1450,31 @@ def save_data_to_fits(params):
     ResultDic['rbin'] =
     ResultDic['rbin'] =
     """
+
+
+    if ['direct_projection']:
+        ResultDic['fisher_params_p_direct'] = params['fisher_params_p_direct']
+        ResultDic['fisher_params_Xi_direct'] = params['fisher_params_Xi_direct']
+        #ResultDic['fisher_params_tot'] = params['fisher_params_tot']
+
+        ResultDic['cov_params_p_direct'] = params['cov_params_p_direct']
+        ResultDic['cov_params_Xi_direct'] = params['cov_params_Xi_direct'] 
+        #ResultDic['cov_params_tot'] = params['cov_params_tot'] 
+        ResultDic['cov_params_diff_direct'] = params['cov_params_diff_direct'] 
+
+        ResultDic['sigma_params_p_direct'] = params['sigma_params_p_direct'] 
+        ResultDic['sigma_params_Xi_direct'] = params['sigma_params_Xi_direct'] 
+        #ResultDic['sigma_params_tot'] = params['sigma_params_tot'] 
+        ResultDic['sigma_params_diff_direct'] = params['sigma_params_diff_direct'] 
+        
+
+        if 'com' in params['probe']:
+            ResultDic['fisher_params_tot_direct'] = params['fisher_params_tot_direct']
+            ResultDic['cov_params_tot_direct'] = params['cov_params_tot_direct'] 
+            ResultDic['sigma_params_tot_direct'] = params['sigma_params_tot_direct'] 
+
+
+
     ResultDic['fisher_params_p'] = params['fisher_params_p']
     ResultDic['fisher_params_Xi'] = params['fisher_params_Xi']
     #ResultDic['fisher_params_tot'] = params['fisher_params_tot']
@@ -1470,7 +1495,7 @@ def save_data_to_fits(params):
         ResultDic['cov_params_tot'] = params['cov_params_tot'] 
         ResultDic['sigma_params_tot'] = params['sigma_params_tot'] 
 
-    fitsname = params['savedir']+'output.fits'
+    fitsname = params['savedir']+'output_'+params['name']+'.fits'
     fitsio.write(fitsname, ResultDic, clobber=True)
     print 'save to ', fitsname
 

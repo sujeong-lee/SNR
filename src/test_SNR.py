@@ -334,50 +334,71 @@ def _reordering( matrix, l=1 ):
     return ReorderedF
 
 
-def reordering( RSDPower, matrix ):
+def reordering( RSDPower, matrix, lmax = None, xi=None ):
 
     #if cut is None : cut = RSDPower.kcenter_y.size  #len(RSDPower.kcenter)
     
-    cut = matrix[:,0].size/3
-    part00 = matrix[0:cut, 0:cut]
-    part02 = matrix[0:cut, cut:2*cut]
-    part04 = matrix[0:cut, 2*cut:]
-    part22 = matrix[cut:2*cut, cut:2*cut]
-    part24 = matrix[cut:2*cut, 2*cut:]
-    part44 = matrix[2*cut:, 2*cut:]
+    if lmax == 0 : 
+        return matrix, RSDPower.multipole_bandpower0
+        
+    elif lmax == 2 : l = 2
+    elif lmax == 4 : l = 3
+    else : 
+        print 'invalid lmax'
+        return None
 
-    ReorderedF = np.zeros(( matrix.shape ))
-    
-    ReorderedP = np.zeros(3 * cut)
-    
-    ind = np.arange(0,3*cut, 3)
+
+    cut = matrix[:,0].size/l
+    ind = np.arange(0,l*cut, l)
     ind2 = ind + 1
     ind3 = ind + 2
+
+    part00 = matrix[0:cut, 0:cut]
+    part02 = matrix[0:cut, cut:2*cut]
+    part22 = matrix[cut:2*cut, cut:2*cut]
+    if lmax == 4 : 
+        part24 = matrix[cut:2*cut, 2*cut:]
+        part04 = matrix[0:cut, 2*cut:]
+        part44 = matrix[2*cut:, 2*cut:]
+
+    ReorderedF = np.zeros(( matrix.shape ))
+    ReorderedP = np.zeros(l * cut)
     
-    ReorderedP[ind] = RSDPower.multipole_bandpower0
-    ReorderedP[ind2] = RSDPower.multipole_bandpower2
-    ReorderedP[ind3] = RSDPower.multipole_bandpower4
+    if xi : pass
+    else :
+        ReorderedP[ind] = RSDPower.multipole_bandpower0
+        ReorderedP[ind2] = RSDPower.multipole_bandpower2
+        if lmax == 4 :
+            ReorderedP[ind3] = RSDPower.multipole_bandpower4
     
     for i in range(cut):
         for j in range(cut):
-            ReorderedF[3*i, 3*j] = part00[i,j]
-            ReorderedF[3*i, 3*j+1] = part02[i,j]
-            ReorderedF[3*i+1, 3*j] = part02[j,i]
-            ReorderedF[3*i, 3*j+2] = part04[i,j]
-            ReorderedF[3*i+2, 3*j] = part04[j,i]
-            ReorderedF[3*i+1, 3*j+1] = part22[i,j]
-            ReorderedF[3*i+1, 3*j+2] = part24[i,j]
-            ReorderedF[3*i+2, 3*j+1] = part24[j,i]
-            ReorderedF[3*i+2, 3*j+2] = part44[i,j]
+            ReorderedF[l*i, l*j] = part00[i,j]
+            ReorderedF[l*i, l*j+1] = part02[i,j]
+            ReorderedF[l*i+1, l*j] = part02[j,i]
+            ReorderedF[l*i+1, l*j+1] = part22[i,j]
+            if lmax == 4 : 
+                ReorderedF[l*i, l*j+2] = part04[i,j]
+                ReorderedF[l*i+2, l*j] = part04[j,i]
+                ReorderedF[l*i+1, l*j+2] = part24[i,j]
+                ReorderedF[l*i+2, l*j+1] = part24[j,i]
+                ReorderedF[l*i+2, l*j+2] = part44[i,j]
 
     return ReorderedF, ReorderedP
 
 
 
     
-def reorderingVector( vector, l = 1 ):
+def reorderingVector( vector, lmax=None ):
     
     #if len(vector) > 1: vector = np.hstack(vector)
+        
+    if lmax == 0 : l = 1
+    elif lmax == 2 : l = 2
+    elif lmax == 4 : l = 3
+    else : 
+        print 'invalid lmax'
+        return None
         
     try : 
         nx, ny = vector.shape

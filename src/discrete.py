@@ -212,7 +212,8 @@ class class_discrete_covariance():
         
         # k spacing for Fourier transform
         self.kbin = np.logspace(np.log10(KMIN),np.log10(KMAX), self.n+1, base=10)
-        self.dlnk = np.log(self.kbin[3]/self.kbin[2])        
+        self.dlnk = np.log(self.kbin[3]/self.kbin[2])  
+        self.dk = self.kbin[1:] - self.kbin[:-1]
         #self.kcenter = np.array([(np.sqrt(self.kbin[i] * self.kbin[i+1])) for i in range(len(self.kbin)-1)])        
 
         
@@ -471,8 +472,8 @@ class class_discrete_covariance():
 
         import cmath
         I = cmath.sqrt(-1)
-        if self.nn == 0 : overnn = 0
-        else : overnn = 1./self.nn
+        #if self.nn == 0 : overnn = 0
+        #else : overnn = 1./self.nn
             
         #kbin = self.kbin
         rcenter = self.rcenter
@@ -488,7 +489,7 @@ class class_discrete_covariance():
         rminmatrix = rmin[matrix2]
         rmaxmatrix = rmax[matrix2]
         rmatrix = rcenter[matrix2]
-        Vir = 4./3 * np.pi * np.fabs(rmax**3 - rmin**3)
+       #Vir = 4./3 * np.pi * np.fabs(rmax**3 - rmin**3)
         
         #try : self.Pmultipole0_interp
         #except : self.multipole_P_band_all()
@@ -508,7 +509,7 @@ class class_discrete_covariance():
         #AvgBessel = sbess(l, kmatrix * rmatrix)
 
 
-        multipole_xi = np.real(I**l) * simpson(kmatrix**2 * Pmatrix * AvgBessel/(2*np.pi**2), kbin, axis=0)#/Vir
+        multipole_xi = np.real(I**l) * simpson( Pmatrix * AvgBessel * (4*np.pi*kmatrix**2)/(2*np.pi)**3, kbin, axis=0)
         #multipole_xi = np.real(I**l) * simpson(kmatrix**3 * Pmatrix * AvgBessel/(2*np.pi**2), dx=dlnk, axis=0)#/Vir
 
         return multipole_xi
@@ -561,11 +562,8 @@ class class_discrete_covariance():
         Besselmatrix2 = avgBessel(l2, kmatrix, rminmatrix, rmaxmatrix )
 
 
-        #Cll = np.real(I**(l1+l2)) /(2*np.pi)**3 * p
+        
         Cll = np.real(I**(l1+l2)) * p
-        #Cxillmatrix = Cll[matrix1] * Besselmatrix1 *  Besselmatrix2
-        
-        
         i=0
         Cxill_matrix = np.zeros((rcenter.size, rcenter.size))
         for ri in range(rcenter.size):
@@ -575,16 +573,20 @@ class class_discrete_covariance():
                 #Cxill_matrix[ri,rj] = simpson( cxill, dx=dlnk )
                 #print 'cov xi {}/{} \r'.format(i, rcenter.size**2),
                 i+=1
+        
         """
-        i = 0
-        m1, m2 = np.mgrid[0:kbin.size, 0:rcenter.size]
+        Cll = np.real(I**(l1+l2)) * p  *1./( 4*np.pi*kbin**2)
+        Vik = 4./3 * np.pi * np.fabs(self.kmax_y**3 - self.kmin_y**3)
+
+        i=0
         Cxill_matrix = np.zeros((rcenter.size, rcenter.size))
         for ri in range(rcenter.size):
-            #for rj in range(rcenter.size):
-            cxill = Cll * Besselmatrix[:,ri][m1] * Besselmatrix * kbin[m1]**2/(2*np.pi**2)
-            Cxill_matrix[:,i] = simpson( cxill, kbin, axis = 0 )
-            print '{}/{} \r'.format(i, rcenter.size),
-            i+=1
+            for rj in range(rcenter.size):
+                cxill = Cll * Besselmatrix1[:,ri] * Besselmatrix2[:,rj]# * kbin**2/(2*np.pi**2)
+                binsize = self.dk_y
+                cxill_shellavg_i = self.shellavg_k( kbin, cxill ) * Vik / binsize
+                Cxill_matrix[ri,rj] = simpson(cxill_shellavg_i * (4*np.pi*self.kcenter_y**3)/(2*np.pi)**3, dx = self.dlnk_y)
+                i+=1
         """
         return Cxill_matrix         
    
@@ -740,8 +742,10 @@ class class_discrete_covariance():
         if self.s == 0 : Dmatrix = 1.
         R = (b + f * mumatrix**2)**2 * Dmatrix
         
-        Rintegral3 = Const_alpha * PS**2 * romberg( R**2 * Le_matrix1 * Le_matrix2, dx=dmu, axis=0 )/(4*np.pi*kbin**2)
-        Rintegral2 = Const_alpha * 2.*overnn * PS * romberg( R * Le_matrix1 * Le_matrix2, dx=dmu, axis=0 )/(4*np.pi*kbin**2)
+
+        delta_kk = 1./(4*np.pi*kbin**2) # delta_kk in continuous form 
+        Rintegral3 = Const_alpha * PS**2 * romberg( R**2 * Le_matrix1 * Le_matrix2, dx=dmu, axis=0 )*delta_kk
+        Rintegral2 = Const_alpha * 2.*overnn * PS * romberg( R * Le_matrix1 * Le_matrix2, dx=dmu, axis=0 )*delta_kk
      
 
         FirstSecond = Rintegral3 + Rintegral2
@@ -749,7 +753,7 @@ class class_discrete_covariance():
         
         # LastTerm
         if l1 == l2:
-            LastTerm = (2*l1 + 1.) * 2. * (2 * pi)**3/Vs*overnn**2 /(4*np.pi*kbin**2)
+            LastTerm = (2*l1 + 1.) * 2. * (2 * pi)**3/Vs*overnn**2 *delta_kk
         else:
             LastTerm = np.zeros(FirstSecond.shape)
         
@@ -839,7 +843,7 @@ class class_discrete_covariance():
                 self.covariance_PP24 = self.covariance_PP(2,4)
                 self.covariance_PP44 = self.covariance_PP(4,4)
 
-        print '\rcov_P  : multiprocessing {:0.0f} %'.format(100),
+        print 'cov_P  : multiprocessing {:0.0f} %'.format(100)
 
 
 
@@ -937,6 +941,7 @@ class class_discrete_covariance():
             if l1 == l2:
                 LastTerm_fourier = 2. * self.Vs/self.nn**2 
                 Vir = 4./3 * np.pi * np.fabs(self.rmax**3 - self.rmin**3)
+
                 LastTerm = 2./(self.Vs*self.nn**2)/Vir
             else : 
                 LastTerm_fourier = 0
@@ -1002,15 +1007,16 @@ class class_discrete_covariance():
 
     def covariance_Xi_all(self, lmax = 0):
         
-        """
+        
         from multiprocessing import Process, Queue
         def covariance_Xi_process(q, order, (l1, l2)):
             q.put((order, self.covariance_Xi(l1, l2)))
             #sys.stdout.write('.')
         
-        inputs = ((0,0),)
-        if lmax == 2 : inputs = ((0,0), (0,2), (2,2),)
-        elif lmax == 4 : inputs = ((0,0), (0,2), (2,2), (0,4), (2,4), (4,4),)
+        #inputs = ((0,0),)
+        #if lmax == 2 : inputs = ((0,0), (0,2), (2,2),)
+        #elif lmax == 4 : 
+        inputs = ((0,0), (0,2), (2,2), (0,4), (2,4), (4,4),)
         d_queue = Queue()
         d_processes = [Process(target=covariance_Xi_process, args=(d_queue, z[0], z[1])) for z in zip(range(len(inputs)), inputs)]
         for p in d_processes:
@@ -1029,6 +1035,14 @@ class class_discrete_covariance():
         
         result.sort()
         result1 = [D[1] for D in result]
+
+        self.covariance00 = result1[0]
+        self.covariance02 = result1[1]
+        self.covariance22 = result1[2]
+        self.covariance04 = result1[3]
+        self.covariance24 = result1[4]
+        self.covariance44 = result1[5]
+
         """
 
         self.covariance00 = self.covariance_Xi(0,0) #result1[0]
@@ -1047,10 +1061,12 @@ class class_discrete_covariance():
             self.covariance04 = self.covariance_Xi(0,4) #result1[3]
             self.covariance24 = self.covariance_Xi(2,4) #result1[4]
             self.covariance44 = self.covariance_Xi(4,4) #result1[5]
+        
+        """
 
         print '\rcov_Xi  : multiprocessing {:0.0f} %'.format(100)
 
-
+        
     def covariance_PXi(self, l1, l2):
 
         """
@@ -1060,6 +1076,11 @@ class class_discrete_covariance():
         l2 : Xi
 
         """
+
+
+        import cmath
+        I = cmath.sqrt(-1)
+        
 
         kbin = self.kbin
         #kbin = self.kcenter_y
@@ -1108,14 +1129,15 @@ class class_discrete_covariance():
         Besselmatrix = avgBessel(l2, kmatrix, rminmatrix, rmaxmatrix )
         Vik = 4./3 * np.pi * np.fabs(self.kmax_y**3 - self.kmin_y**3)
 
-        covp_diag = Cll  * (4*np.pi*kbin**2)/(2*np.pi)**3
+        #covp_diag = Cll  * (4*np.pi*kbin**2)/(2*np.pi)**3
+        covp_diag = Cll /(2*np.pi)**3 
 
         Cllmatrix = np.zeros((self.kcenter_y.size, rbin.size))
         #covp_diag = self.shellavg_k( kbin, covp_diag )
         #print covp_diag.shape, kbin.size
         for i in range(rbin.size):
-            covpxi_diag = covp_diag * Besselmatrix[:,0]
-            shellavg_covpxi_diag = self.shellavg_k( kbin, covpxi_diag ) * Vik
+            covpxi_diag = covp_diag * Besselmatrix[:,i]
+            shellavg_covpxi_diag = np.real(I**l2) * self.shellavg_k( kbin, covpxi_diag ) * Vik
             binsize = self.dk_y #4*np.pi*self.kcenter_y**2 * self.dk_y #self.dk_y #self.kmax_y - self.kmin_y
             shellavg_covpxi_diag_perbinsize = shellavg_covpxi_diag / binsize
             Cllmatrix[:,i] = shellavg_covpxi_diag_perbinsize
@@ -1192,7 +1214,7 @@ class class_discrete_covariance():
         
         #import pp, sys, time
         
-        """
+        
 
         from multiprocessing import Process, Queue
 
@@ -1200,13 +1222,12 @@ class class_discrete_covariance():
             re = self.covariance_PXi(l1, l2)
             q.put((order, re))
         
-        inputs = ((0,0),)
-        if lmax == 2 : inputs = ((0, 0),(0, 2),(2, 0),(2, 2),)
-        elif lmax == 4 : 
-            inputs = ((0, 0),(0, 2),(2, 0),(2, 2),(0, 4),(2, 4),(4, 0),(4, 2),(4, 4))
-        #inputs = ((0, 0),(0, 2),(0, 4),(2, 0),(2, 2),(2, 4),(4, 0),(4, 2),(4, 4))
+        #inputs = ((0,0),)
+        #if lmax == 2 : inputs = ((0, 0),(0, 2),(2, 0),(2, 2),)
+        #elif lmax == 4 : 
+        #    inputs = ((0, 0),(0, 2),(2, 0),(2, 2),(0, 4),(2, 4),(4, 0),(4, 2),(4, 4))
+        inputs = ((0, 0),(0, 2),(2, 0),(2, 2),(0, 4),(2, 4),(4, 0),(4, 2),(4, 4))
 
-        print inputs 
         q = Queue()
         Processes = [Process(target = PXi_process, args=(q, z[0], z[1])) for z in zip(range(len(inputs)), inputs)]
         for p in Processes: p.start()
@@ -1224,6 +1245,16 @@ class class_discrete_covariance():
         result.sort()
         result1 = [result[i][1] for i in range(len(result)) ]
         
+        self.covariance_PXi00 = result1[0]
+        self.covariance_PXi02 = result1[1]
+        self.covariance_PXi20 = result1[2]
+        self.covariance_PXi22 = result1[3]   
+        self.covariance_PXi04 = result1[4]
+        self.covariance_PXi24 = result1[5]
+        self.covariance_PXi40 = result1[6]
+        self.covariance_PXi42 = result1[7]
+        self.covariance_PXi44 = result1[8]  
+
         
         """
         #self.covariance_PXi00 = result1[0]
@@ -1248,7 +1279,8 @@ class class_discrete_covariance():
             self.covariance_PXi40 = self.covariance_PXi(4,0)#result1[6]
             self.covariance_PXi42 = self.covariance_PXi(4,2)#result1[7]
             self.covariance_PXi44 = self.covariance_PXi(4,4)#result1[8]
-
+        
+        """
         print '\rcov_PXi  : multiprocessing {:0.0f} %'.format(100)
 
     def derivative_bfs(self,l):
