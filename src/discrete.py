@@ -511,7 +511,6 @@ class class_discrete_covariance():
 
         multipole_xi = np.real(I**l) * simpson( Pmatrix * AvgBessel * (4*np.pi*kmatrix**2)/(2*np.pi)**3, kbin, axis=0)
         #multipole_xi = np.real(I**l) * simpson(kmatrix**3 * Pmatrix * AvgBessel/(2*np.pi**2), dx=dlnk, axis=0)#/Vir
-
         return multipole_xi
     
 
@@ -531,8 +530,8 @@ class class_discrete_covariance():
         """    
         
 
-        from fortranfunction import sbess
-        sbess = np.vectorize(sbess)
+        #from fortranfunction import sbess
+        #sbess = np.vectorize(sbess)
                 
         import cmath
         I = cmath.sqrt(-1)
@@ -568,7 +567,7 @@ class class_discrete_covariance():
         Cxill_matrix = np.zeros((rcenter.size, rcenter.size))
         for ri in range(rcenter.size):
             for rj in range(rcenter.size):
-                cxill = Cll * Besselmatrix1[:,ri] * Besselmatrix2[:,rj] * kbin**2/(2*np.pi**2)
+                cxill = Cll * Besselmatrix1[:,ri] * Besselmatrix2[:,rj] * (4*np.pi*kbin**2)/(2*np.pi)**3
                 Cxill_matrix[ri,rj] = simpson( cxill, kbin )
                 #Cxill_matrix[ri,rj] = simpson( cxill, dx=dlnk )
                 #print 'cov xi {}/{} \r'.format(i, rcenter.size**2),
@@ -798,6 +797,7 @@ class class_discrete_covariance():
                 covP_interp = self.covP44_interp
             else : raise ValueError
         
+        Vik = 4./3 * pi * ( self.kmax_y**3 - self.kmin_y**3 ) 
         """
         Vi = 4./3 * pi * ( self.kmax_y**3 - self.kmin_y**3 ) # ~ 4*np.pi*kcenter**2*dk
         volume_fac = (4*np.pi*kcenter**2)/Vi
@@ -813,8 +813,8 @@ class class_discrete_covariance():
 
         ## -----------------------
         covP_diag = covP_interp(self.kbin)
-        shellavg_covP_diag = self.shellavg_k(self.kbin, covP_diag)
-        binsize = self.dk_y #4*np.pi*self.kcenter_y**2 * self.dk_y #self.dk_y #self.kmax_y - self.kmin_y
+        shellavg_covP_diag = self.shellavg_k(self.kbin, covP_diag / delta_kk)
+        binsize = Vik #/(4*np.pi*self.kcenter_y**2) #1.0 #4*np.pi*self.kcenter_y**2/ Vik #self.dk_y #4*np.pi*self.kcenter_y**2 * self.dk_y #self.dk_y #self.kmax_y - self.kmin_y
         shellavg_covP_diag_perbinsize = shellavg_covP_diag / binsize
         covariance_mutipole_PP = np.zeros((self.kcenter_y.size,self.kcenter_y.size))
         np.fill_diagonal(covariance_mutipole_PP,shellavg_covP_diag_perbinsize)
@@ -893,6 +893,9 @@ class class_discrete_covariance():
 
         """
 
+        import cmath
+        I = cmath.sqrt(-1)
+
         kbin = self.kbin
 
         try : self.covP00_interp(1.0)
@@ -933,20 +936,26 @@ class class_discrete_covariance():
         #shellavg_covp_diag_perbinsize = shellavg_covp_diag / binsize
         LastTerm_fourier = 0
         LastTerm = 0
-        """
+        
         if self.nn == 0 :
             LastTerm_fourier = 0
             LastTerm = 0
         else : 
             if l1 == l2:
-                LastTerm_fourier = 2. * self.Vs/self.nn**2 
-                Vir = 4./3 * np.pi * np.fabs(self.rmax**3 - self.rmin**3)
+                #LastTerm_fourier = 2. / ( self.Vs * self.nn**2 )
+                LastTerm_fourier = (2*l1 + 1.) * 2. /self.Vs / self.nn**2
 
-                LastTerm = 2./(self.Vs*self.nn**2)/Vir
+                Vir = 4./3 * np.pi * np.fabs(self.rmax**3 - self.rmin**3)
+                #LastTerm = 2./(self.Vs*self.nn**2)/Vir
+
+                #LastTerm_ = np.real(I**(2+l1)) * (2*l1 + 1) * 2./(self.Vs*self.nn**2)/Vir
+                LastTerm_ = np.real(I**(2*l1)) * LastTerm_fourier /Vir
+                LastTerm = np.zeros((self.rcenter.size,self.rcenter.size))
+                np.fill_diagonal(LastTerm, LastTerm_)
             else : 
                 LastTerm_fourier = 0
                 LastTerm = 0
-        """
+        
         covxi = self.fourier_transform_kr1r2(l1, l2, kbin, covp_diag-LastTerm_fourier)
         covxi += LastTerm
         return covxi
@@ -1129,16 +1138,16 @@ class class_discrete_covariance():
         Besselmatrix = avgBessel(l2, kmatrix, rminmatrix, rmaxmatrix )
         Vik = 4./3 * np.pi * np.fabs(self.kmax_y**3 - self.kmin_y**3)
 
-        #covp_diag = Cll  * (4*np.pi*kbin**2)/(2*np.pi)**3
-        covp_diag = Cll /(2*np.pi)**3 
+        covp_diag = Cll  * (4*np.pi*kbin**2)/(2*np.pi)**3
+        #covp_diag = Cll /(2*np.pi)**3 
 
         Cllmatrix = np.zeros((self.kcenter_y.size, rbin.size))
         #covp_diag = self.shellavg_k( kbin, covp_diag )
         #print covp_diag.shape, kbin.size
         for i in range(rbin.size):
             covpxi_diag = covp_diag * Besselmatrix[:,i]
-            shellavg_covpxi_diag = np.real(I**l2) * self.shellavg_k( kbin, covpxi_diag ) * Vik
-            binsize = self.dk_y #4*np.pi*self.kcenter_y**2 * self.dk_y #self.dk_y #self.kmax_y - self.kmin_y
+            shellavg_covpxi_diag = np.real(I**l2) * self.shellavg_k( kbin, covpxi_diag )# * Vik
+            binsize = 1.0 #Vik #self.dk_y #4*np.pi*self.kcenter_y**2 * self.dk_y #self.dk_y #self.kmax_y - self.kmin_y
             shellavg_covpxi_diag_perbinsize = shellavg_covpxi_diag / binsize
             Cllmatrix[:,i] = shellavg_covpxi_diag_perbinsize
 
@@ -1234,7 +1243,6 @@ class class_discrete_covariance():
             
         result = []
         percent = 0.0
-        print ''
         for p in Processes:
             result.append(q.get())
             percent += + 1./len( Processes ) * 100

@@ -1,6 +1,6 @@
 name : nn
-k : [0.001, 0.25, 1000]  #[kmin, kmax, kN]
-r : [25, 150, 25]  #[rmin, rmax, rN]
+k : [0.001, 0.25, 100]  #[kmin, kmax, kN]
+r : [25, 150, 250]  #[rmin, rmax, rN]
 #logscale : False
 parameter_ind : [0,1,2,3]
 lmax : 4

@@ -1,8 +1,8 @@
-name : bfs
-k : [0.001, 0.25, 1000]  #[kmin, kmax, kN]
-r : [40, 180, 35]  #[rmin, rmax, rN]
+name : bf
+k : [0.001, 0.25, 200]  #[kmin, kmax, kN]
+r : [40, 180, 70]  #[rmin, rmax, rN]
 #logscale : False
-parameter_ind : [0,1,2]
+parameter_ind : [0,1]
 lmax : 4
 
 b : 2

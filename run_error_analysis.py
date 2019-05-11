@@ -25,6 +25,10 @@ def run_error_analysis(params):
     KMIN, KMAX = 1e-04, 10.
     lmax = params['lmax']
     parameter_ind = params['parameter_ind']  
+    kscale = 'log'
+    if 'kscale' in params : kscale = params['kscale']
+    rscale = 'lin'
+    if 'rscale' in params : rscale = params['rscale']
     #parameter_ind_xi = params['parameter_ind_xi'] 
     
     b = 2.0
@@ -48,11 +52,12 @@ def run_error_analysis(params):
     print ' k = [{}, {}], kN={}'.format(kmin, kmax, kN)
     print ' r = [{}, {}], rN={}'.format(rmin, rmax, rN)
     print ' lmax={}'.format(lmax)
+    print ' kscale:', kscale, ', rscale:', rscale
     print '-----------------------------------'
     
     #RSDPower = NoShell_covariance(KMIN, KMAX, rmin, rmax, 2**12 + 1, rN, kN, b,f,s,nn,logscale = logscale)
     RSDPower = class_discrete_covariance(KMIN=KMIN, KMAX=KMAX, RMIN=rmin, RMAX=rmax, n=20000, n_y = kN, n2=rN, b=b, f=f,
-     s=s, nn=nn, kscale = 'log', rscale='lin')
+     s=s, nn=nn, kscale = kscale, rscale=rscale)
     RSDPower.mPk_file = 'src/matterpower_z_0.55.dat'
 
     kcut_min = get_closest_index_in_data( kmin, RSDPower.kmin_y )   
@@ -629,7 +634,7 @@ def BandpowerFisher(params, RSDPower, kmin = 0, kmax = 10, lmax=4):
         print '\nUse Precalculated FisherP ', params['fisher_bandpower_P_filename']
         
     if 'fisher_bandpower_Xi_filename' not in params:
-        FisherXi = pinv(covXi, rcond=1e-30)
+        FisherXi = pinv(covXi, rcond=1e-15)
         if np.sum(FisherXi.diagonal()<=0) != 0 : raise ValueError('Inversion Failed')
             
         #f2 = params['savedir']'Xi.fisher'
@@ -810,7 +815,7 @@ def DirectProjection_to_params(params, RSDPower, parameter =[0,1,2,3], kmin = 0,
     
     
     
-    if 'fisherXi_filename' not in params: FisherXi = pinv(covXi, rcond=1e-30)
+    if 'fisherXi_filename' not in params: FisherXi = pinv(covXi, rcond=1e-15)
     else : FisherXi = np.genfromtxt(params['fisherXi_filename'])
     if np.sum(FisherXi.diagonal() < 0) != 0 : 
         raise ValueError(' Inversion Failed! ')
@@ -932,7 +937,7 @@ def Calculate_Fisher_tot(params, RSDPower, kmin = None, kmax = None, lmax = 4):
             d = covXi
             ia = FisherP #masking(RSDPower, FisherP, kmin=kmin, kmax=kmax, lmax=lmax)
 
-            Fd = pinv( d - np.dot( np.dot( c, ia ), b), rcond=1e-30 )
+            Fd = pinv( d - np.dot( np.dot( c, ia ), b), rcond=1e-15 )
             Fc = - np.dot( np.dot( Fd, c), ia)
             Fb = - np.dot( np.dot( ia, b ), Fd )
             Fa = ia + np.dot( np.dot (np.dot( np.dot( ia, b), Fd ), c), ia)
@@ -1019,7 +1024,7 @@ def DirectProjection_to_params_shotnoise(params, RSDPower, p_parameter =[0,1,2,3
     #print 'F-params_p\n', F_params_P
     
     if 'fisherXi_filename' not in params: 
-        FisherXi = pinv(covXi, rcond=1e-30)
+        FisherXi = pinv(covXi, rcond=1e-15)
         if np.sum(FisherXi.diagonal() < 0) != 0: raise ValueError('Inversion Failed')
         f2 = params['savedir']+'Xi.fisher'
         np.savetxt(f2, FisherXi)
@@ -1082,6 +1087,7 @@ def DirectProjection_to_params_shotnoise(params, RSDPower, p_parameter =[0,1,2,3
         for i in range(len(p_parameter)): print sigtot[i],
     print '\ndif:',
     for i in range(len(p_parameter)): print sigdiff[i],
+    print ''
 
     #DAT = np.column_stack((ind, Fqa.ravel(), Fqd4.ravel(), F_params_tot_q.ravel(), F_params_tot.ravel() ))
     #np.savetxt(params['savedir']+'fisher_params_nn.txt', DAT)
@@ -1287,6 +1293,8 @@ def Fisher_params(params, RSDPower, parameter = [0,1,2,3], kmin=None, kmax=None,
 
     print '\ndif:',
     for i in range(len(parameter)): print sigdiff[i],
+
+    print '\n'
 
 
 
@@ -1513,7 +1521,9 @@ if __name__=='__main__':
     except SystemExit:
         sys.exit(1)
 
+
     params = yaml.load(open(param_file))
+    os.system('cp '+param_file+' '+params['savedir']+'/params.yaml')
 
     print '-----------------------------------'
     print ' Run Error Analaysis'
@@ -1531,5 +1541,8 @@ if __name__=='__main__':
     print ' savedir : ', save_dir
     run_error_analysis(params)
     save_data_to_fits(params)
+
+    #stream = file(params['savedir'] + '/' + params['name']+'.yaml', 'w')
+    #yaml.dump( params, stream )
     print '\n------------------ end ---------------------'
 

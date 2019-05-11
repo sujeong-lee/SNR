@@ -1,8 +1,8 @@
-name : nn
+name : bfs
 k : [0.001, 0.2, 2000]  #[kmin, kmax, kN]
-r : [18, 180, 40]  #[rmin, rmax, rN]
+r : [18, 180, 50]  #[rmin, rmax, rN]
 #logscale : False
-parameter_ind : [0,1,2,3]
+parameter_ind : [0,1,2]
 lmax : 4
 
 b : 2
@@ -15,12 +15,12 @@ probe : ['p','xi','com']
 direct_projection : True
 
 # precalculated filename
-#covPP_filename : output_testscales_testscales/P.cov 
-#covXi_filename : output_testscales_testscales/Xi.cov  
-#covPXi_filename : output_testscales_testscales/PXi.cov  
-#multipole_p_filename : output_testscales_testscales/multipole_p.datavector #data_txt/datav/test_bf_k0_025_kN1000_r18_180_rN162_multipole_p.datavector # no kcut
-#derivative_P_filename : output_testscales_testscales/DP_datavector.txt #data_txt/datav/test_bf_k0_025_kN1000_r18_180_rN162_P.datavector  # no kcut
-#derivative_Xi_filename : output_testscales_testscales/DXi_datavector.txt #data_txt/datav/test_bf_k0_025_kN1000_r18_180_rN162_Xi.datavector 
+covPP_filename : output_testscales_testscales/P.cov 
+covXi_filename : output_testscales_testscales/Xi.cov  
+covPXi_filename : output_testscales_testscales/PXi.cov  
+multipole_p_filename : output_testscales_testscales/multipole_p.datavector #data_txt/datav/test_bf_k0_025_kN1000_r18_180_rN162_multipole_p.datavector # no kcut
+derivative_P_filename : output_testscales_testscales/DP_datavector.txt #data_txt/datav/test_bf_k0_025_kN1000_r18_180_rN162_P.datavector  # no kcut
+derivative_Xi_filename : output_testscales_testscales/DXi_datavector.txt #data_txt/datav/test_bf_k0_025_kN1000_r18_180_rN162_Xi.datavector 
 #params_datavector_filename : output_demo3/DP_params_datavector.txt #data_txt/datav/test_bf_k0_025_kN1000_r18_180_rN162_params.datavector #no kmin kmax cut
 #params_xi_datavector_filename : output_demo3/DXi_params_datavector.txt
 #fisher_bandpower_P_filename : output_demo3/bandpowerP_fisher.txt 

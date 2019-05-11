@@ -11,28 +11,77 @@ from noshellavg_v2 import *
 #    log_interp = lambda zz: np.power(10.0, lin_interp(np.log10(zz)))
 #    return log_interp
 
-def mock_covariance(p_model, xi_model, p_mock, xi_mock):
-    m1, m2 = np.mgrid[0:p_model.size, 0:xi_model.size]
-    mock_covpxi = np.zeros(( p_model.size, xi_model.size ))
+def mock_covariance(p_mock, xi_mock):
+
+
+    p_mean = np.mean( np.array(p_mock), axis = 0)
+    xi_mean = np.mean( np.array(xi_mock), axis = 0)
+
+    m1, m2 = np.mgrid[0:p_mean.size, 0:xi_mean.size]
+    mock_covpxi = np.zeros(( p_mean.size, xi_mean.size ))
+
     for i in range(len(p_mock)) :
-        p = p_mock[i]
-        x = xi_mock[i]
-        mock_covpxi += ( p[m1] - p_model[m1]) * (x[m2] - xi_model[m2])
+        p = np.array(p_mock[i])
+        x = np.array(xi_mock[i])
+        mock_covpxi += ( p[m1] - p_mean[m1]) * (x[m2] - xi_mean[m2])
         print '{}/{}                \r'.format(i+1, len(p_mock)),
+
+    #mock_covpxi = 0.5 * (mock_covpxi + mock_covpxi.T)
     mock_covpxi = 1./( len(p_mock) - 1 ) * mock_covpxi
     
     #if p_model.size == xi_model.size : mock_covpxi = (mock_covpxi + mock_covpxi.T)/2.
     return mock_covpxi
 
-def fourier_tr_xi_mock(cosmo, p_mock):
+
+def _fourier_tr_xi_mock(cosmo, l, kbin, p_mock):
+    #p_mock_interp = scipy.interpolate.interp1d( kbin, p_mock )
+    #kbin_fine = np.logspace(np.log10( kbin[0]), np.log10(kbin[-1]), num=20000 )
+    #kbin_fine = kbin_fine[1:-1]
+    #print kbin_fine[-1]
+    #p_mock_fine = p_mock0_interp(kbin_fine)
+    #xi_mock0 = cosmo.fourier_transform_kr(0, kbin_fine, p_mock_fine)
     xi_mock = []
     for i in range(len(p_mock)):
-        xi_mock.append(cosmo.fourier_transform_kr(0, cosmo.kbin, p_mock[i]))
-        print 'fourier transform.. {}/{} \r'.format(i+1, len(p_mock)),
+        #p_mock_interp = scipy.interpolate.interp1d( kbin, p_mock[i] )
+        #print kbin_fine[0], kbin_fine[-1], kbin[-1], kbin[0]
+        #p_mock_fine = p_mock_interp(kbin_fine)
+        xi_mock.append(cosmo.fourier_transform_kr(l, kbin, p_mock[i]))
+        #xi_mock.append(cosmo.fourier_transform_kr(0, cosmo.kbin, p_mock[i]))
+        print 'fourier transform.. {:04}/{} \r'.format(i+1, len(p_mock)),
     xi_mock = np.array(xi_mock)
     return xi_mock
 
-def generate_mocks( cosmo, p_model, covp_model, N_mock = 500 ):
+
+def fourier_tr_xi_mock(cosmo, l, kbin, p_mock):
+    #p_mock_interp = scipy.interpolate.interp1d( kbin, p_mock )
+    kbin_fine = np.logspace(np.log10( kbin[0]), np.log10(kbin[-1]), num=20000 )
+    kbin_fine = kbin_fine[1:-1]
+    #p_mock_fine = p_mock0_interp(kbin_fine)
+    #xi_mock0 = cosmo.fourier_transform_kr(0, kbin_fine, p_mock_fine)
+    xi_mock = []
+    for i in range(len(p_mock)):
+        p_mock_interp = scipy.interpolate.interp1d( kbin, p_mock[i] )
+        #print kbin_fine[0], kbin_fine[-1], kbin[-1], kbin[0]
+        p_mock_fine = p_mock_interp(kbin_fine)
+        xi_mock.append(cosmo.fourier_transform_kr(l, kbin_fine, p_mock_fine))
+        #xi_mock.append(cosmo.fourier_transform_kr(0, cosmo.kbin, p_mock[i]))
+        print 'fourier transform.. {:04}/{} \r'.format(i+1, len(p_mock)),
+    xi_mock = np.array(xi_mock)
+    return xi_mock
+
+
+def generate_mocks( cosmo, l, kbin, p_model, covp_model, N_mock = 500 ):
+    print 'generate mocks... size=', N_mock, '    '
+    p_mock = np.array([np.random.normal(loc=p_model[i], scale=np.sqrt(covp_model.diagonal()[i]),
+                                             size=N_mock) for i in range(kbin.size)]).T
+    xi_mock = fourier_tr_xi_mock(cosmo, l, kbin, p_mock)
+
+    # sort mocks so uncorrelated p and xi mocks in the same row
+    #xi_mock = np.vstack((xi_mock[1:,], xi_mock[0,:]))
+    return p_mock, xi_mock
+
+
+def _generate_mocks( cosmo, p_model, covp_model, N_mock = 500 ):
     print 'generate mocks... size=', N_mock
     p_mock = np.array([np.random.normal(loc=p_model[i], scale=np.sqrt(covp_model.diagonal()[i]),
                                              size=N_mock) for i in range(cosmo.kbin.size)]).T
@@ -56,12 +105,12 @@ def load_mocks( dir = '../data_txt/mocks/'  ):
     kcenter = np.loadtxt(dir + 'k.dat')
     return kcenter, mocks_p.T, rcenter.T, mocks_xi.T
 
-def compute_data_vector(cosmo, b=2.0,f=0.74,s=3.5):
+def compute_data_vector(cosmo, l=0, b=2.0,f=0.74,s=3.5):
     cosmo.b = b
     cosmo.f = f
     cosmo.s = s
-    datavp = cosmo.multipole_P(0)
-    datavxi = cosmo.multipole_Xi(0)
+    datavp = cosmo.multipole_P(l)
+    datavxi = cosmo.multipole_Xi(l)
     return [datavp, datavxi]
 
 
@@ -78,7 +127,7 @@ def datavector_bias_2d_interp(cosmo):
     datavlist_xi = []
     i=0
     for bb in blist:
-        datavp, datavxi = compute_data_vector(cosmo, b=bb, s = 0)
+        datavp, datavxi = compute_data_vector(cosmo, b=bb, s = cosmo.s)
         datavlist.append(datavp)
         datavlist_xi.append(datavxi)
         print '{:0.2f}  {}/{}                   \r'.format(bb, i+1, len(blist)),
@@ -90,7 +139,7 @@ def datavector_bias_2d_interp(cosmo):
     #print datavlist.shape, datavlist_xi.shape
     #datavlist_com = np.hstack((datavlist, datavlist_xi  ))
     print 'generate 2D interpolation table'
-    datavp_interp = interp_2d( cosmo.kbin, blist, datavlist )
+    datavp_interp = interp_2d( cosmo.kcenter_y, blist, datavlist )
     datavxi_interp = interp_2d( cosmo.rcenter[::-1], blist, datavlist_xi )
 
     cosmo.b = 2.0
@@ -247,17 +296,16 @@ def best_chisqr( covinv = None, datav=None, mockv = None, p=False):
     else : chisqr = np.dot(np.dot( d_diff, covinv ), d_diff)
     return chisqr
 
+
 def getting_sigma_bs( cosmo, b = None, cov = None, datavs = None, 
                      mockdatavs = None, p=False, kmin=None, kmax = None,
-                     rmin = None, rmax = None):
-    
-    
+                     rmin = None, rmax = None):    
     if kmin == None : 
         idx_kmin = 0
-        idx_kmax = cosmo.kbin.size
+        idx_kmax = cosmo.kcenter_y.size
     else : 
-        idx_kmin = get_closest_index_in_data( kmin, cosmo.kbin )   
-        idx_kmax = get_closest_index_in_data( kmax, cosmo.kbin )
+        idx_kmin = get_closest_index_in_data( kmin, cosmo.kmin_y )   
+        idx_kmax = get_closest_index_in_data( kmax, cosmo.kmax_y )
     
     if rmin == None : 
         idx_rmin = cosmo.rmax.size
@@ -310,8 +358,8 @@ def getting_sigma_bs( cosmo, b = None, cov = None, datavs = None,
     
     
     
-    if p :dqdb = cosmo.dPdb0_interp(cosmo.kbin)
-    else :dqdb = cosmo.dxidb
+    if p :dqdb = cosmo.dPb0#cosmo.dPdb0_interp(cosmo.kbin)
+    else :dqdb = cosmo.dxib0
     dqdb = dqdb[mask]
     
     sigma_theory = 1./np.sqrt(np.dot( np.dot( dqdb, covinv), dqdb.T))

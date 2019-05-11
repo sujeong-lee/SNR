@@ -1,6 +1,6 @@
-name : nn
-k : [0.001, 0.25, 100]  #[kmin, kmax, kN]
-r : [20, 160, 280]  #[rmin, rmax, rN]
+name : convergence_k900_r100
+k : [0.001, 0.25, 900]  #[kmin, kmax, kN]
+r : [20, 160, 100]  #[rmin, rmax, rN]
 #logscale : False
 parameter_ind : [0,1,2,3]
 lmax : 4
@@ -15,12 +15,12 @@ probe : ['p','xi','com']
 direct_projection : True
 
 # precalculated filename
-covPP_filename : output_Grieb_Sanchez/P.cov 
-covXi_filename : output_Grieb_Sanchez/Xi.cov  
-covPXi_filename : output_Grieb_Sanchez/PXi.cov  
-multipole_p_filename : output_Grieb_Sanchez/multipole_p.datavector #data_txt/datav/test_bf_k0_025_kN1000_r18_180_rN162_multipole_p.datavector # no kcut
-derivative_P_filename : output_Grieb_Sanchez/DP_datavector.txt #data_txt/datav/test_bf_k0_025_kN1000_r18_180_rN162_P.datavector  # no kcut
-derivative_Xi_filename : output_Grieb_Sanchez/DXi_datavector.txt #data_txt/datav/test_bf_k0_025_kN1000_r18_180_rN162_Xi.datavector 
+#covPP_filename : output_Grieb_Sanchez/P.cov 
+covXi_filename : output_convergence/Xi.cov  
+#covPXi_filename : output_Grieb_Sanchez/PXi.cov  
+#multipole_p_filename : output_Grieb_Sanchez/multipole_p.datavector #data_txt/datav/test_bf_k0_025_kN1000_r18_180_rN162_multipole_p.datavector # no kcut
+#derivative_P_filename : output_Grieb_Sanchez/DP_datavector.txt #data_txt/datav/test_bf_k0_025_kN1000_r18_180_rN162_P.datavector  # no kcut
+#derivative_Xi_filename : output_Grieb_Sanchez/DXi_datavector.txt #data_txt/datav/test_bf_k0_025_kN1000_r18_180_rN162_Xi.datavector 
 #params_datavector_filename : output_demo3/DP_params_datavector.txt #data_txt/datav/test_bf_k0_025_kN1000_r18_180_rN162_params.datavector #no kmin kmax cut
 #params_xi_datavector_filename : output_demo3/DXi_params_datavector.txt
 #fisher_bandpower_P_filename : output_demo3/bandpowerP_fisher.txt 
@@ -28,7 +28,7 @@ derivative_Xi_filename : output_Grieb_Sanchez/DXi_datavector.txt #data_txt/datav
 #fisher_bandpower_tot_filename : output_demo3/bandpower_tot_fisher.txt 
 
 ######## output ##########
-savedir : output_Grieb_Sanchez
+savedir : output_convergence
 SNR : 0
 Reid : 0
 
