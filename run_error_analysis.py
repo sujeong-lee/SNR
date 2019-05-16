@@ -27,10 +27,10 @@ def run_error_analysis(params):
     parameter_ind = params['parameter_ind']  
     kscale = 'log'
     if 'kscale' in params : kscale = params['kscale']
-    rscale = 'lin'
+    rscale = 'log'
     if 'rscale' in params : rscale = params['rscale']
     #parameter_ind_xi = params['parameter_ind_xi'] 
-    
+
     b = 2.0
     if 'b' in params: b = params['b']
     f = 0.74
@@ -202,20 +202,21 @@ def Covariance_matrix(params, RSDPower):
 def P_multipole(params, RSDPower):
 
     # power spectrum multipoles l = 0,2,4
-    
     #RSDPower.multipole_P_band_all() 
-    RSDPower.multipole_bandpower0 = RSDPower.multipole_P(0)
+    RSDPower.multipole_bandpower0 = RSDPower.multipole_P(0) + 1./RSDPower.nn
     RSDPower.multipole_bandpower2 = RSDPower.multipole_P(2)
     RSDPower.multipole_bandpower4 = RSDPower.multipole_P(4)
     
     multipole_datav = np.hstack([RSDPower.multipole_bandpower0,RSDPower.multipole_bandpower2\
                              ,RSDPower.multipole_bandpower4])
     #np.savetxt(params['savedir']'+'multipole_p.datavector',multipole_datav )
-#    params['multipole_P_filename'] = params['savedir']'+'multipole_p.datavector'
+    #    params['multipole_P_filename'] = params['savedir']'+'multipole_p.datavector'
 
-    f = params['savedir']+'multipole_p.datavector'
-    np.savetxt(f,multipole_datav)
-    params['multipole_P_filename'] = f
+    if params is None : pass
+    else : 
+        f = params['savedir']+'multipole_p.datavector'
+        np.savetxt(f,multipole_datav)
+        params['multipole_P_filename'] = f
 
     return multipole_datav
     
@@ -233,9 +234,11 @@ def Xi_multipole(params, RSDPower):
     #np.savetxt(params['savedir']'+'multipole_xi.datavector',multipole_datav )
     #params['multipole_Xi_filename'] = params['savedir']'+'multipole_xi.datavector'
         
-    f = params['savedir']+'multipole_xi.datavector'
-    np.savetxt(f,multipole_datav)
-    params['multipole_Xi_filename'] = f
+    if params is None : pass
+    else : 
+        f = params['savedir']+'multipole_xi.datavector'
+        np.savetxt(f,multipole_datav)
+        params['multipole_Xi_filename'] = f
 
     return multipole_datav
     
@@ -1126,6 +1129,7 @@ def CumulativeSNR(params, RSDPower, kmin=None, kmax=None, lmax=4):
     from test_SNR import reorderingVector, reordering, _reordering, blockwise
     
     multipole_p = np.genfromtxt(params['multipole_P_filename'])
+    multipole_p[:RSDPower.kcenter_y.size]-=1./RSDPower.nn
 
     datav_multipole = masking_paramsdatav(RSDPower, multipole_p.reshape(1, multipole_p.size)
                                     , kmin=RSDPower.KMIN, kmax = RSDPower.KMAX, lmax=lmax)     

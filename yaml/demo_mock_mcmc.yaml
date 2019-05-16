@@ -1,0 +1,47 @@
+name : demo
+#k : [0.004, 0.28, 500]  #[kmin, kmax, kN]
+#r : [0.001, 205, 42] #[rmin, rmax, rN]
+k : [0.01, 0.2, 500]  #[kmin, kmax, kN]
+r : [0.1, 200, 100]  #[rmin, rmax, rN]
+parameter_ind : [0,1,2]
+lmax : 4
+
+#continue_chain : like/like_mcmc_Ashley_combined_b_p0_sam12000
+
+## MCMC parameters
+sampler : fmin
+
+nsample_dimension : 20
+threshold : 1
+maxiter : 100000
+
+
+b_range : [1.9, 2, 2.1, 0.2]
+f_range : [0.7, 0.74, 0.78, 0.1]
+#s_range : 3.5
+s_range : [3.0, 3.5, 4.0, 0.7]
+#nn_range : [0.0001, 0.0003, 0.001, 0.0001]
+nn_range : 0.0003
+
+
+n_threads : 12
+iterations : 5000
+nwalker : 12
+
+probe : ['p']
+fisher_filename : output_mock/chain/bandpowerP_fisher.txt # output_test//Xi_fisher.txt
+#fisher_filename : output_full/fishertot.fisher
+#fisher_filename : data_txt/cov/Ashley_mat_tot.fisher
+#fisher_filename : data_txt/cov/test_bf_k0_025_kN1000_r18_180_rN162_bandpower_PP.fisher 
+#datav_filename : output_test/chain/datavector.txt #data_txt/datav/test_bf_k0_025_kN1000_r18_180_rN162_multipole_p.datavector 
+mask_filename : output_mock/chain/mask.txt
+
+SNR : False
+savedir : output_mock/
+
+
+######## mock ##############3
+fitting_mocks : True
+n_mocks : 200
+mock_dir : data_txt/mocks_multipole/kbin500/all/
+mock_probe : p

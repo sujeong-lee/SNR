@@ -1,7 +1,9 @@
+import os, sys
+sys.path.append('src/')
 from mcmc_lib import *
-from noshellavg import *
+#from noshellavg import *
+from discrete import *
 from run_error_analysis import *
-import os
 import numpy as np
 
 import argparse
@@ -13,18 +15,25 @@ def main(params, pool=None):
 def run_mcmc(params, pool=None):    
 
     #save_dir = 'output/'+params['name']+'/'
-
-    params['savedir'] = params['savedir']+'/'
-    save_dir = params['savedir']
-    os.system('mkdir '+ save_dir )
-    print 'save directory :', save_dir
+    #params['savedir'] = params['savedir']+'/chain/'
+    save_dir = params['savedir']+'/chain/'
+    if os.path.exists(save_dir): 
+        print 'savedir exists...', save_dir
+    else : 
+        os.makedirs(save_dir)
+        print 'create save directory..', save_dir
 
     kmin, kmax, kN = params['k']
     rmin, rmax, rN = params['r']
-    logscale = params['logscale']
-    KMIN, KMAX = 1e-3, 2.0
+
+    kscale = 'log'
+    if 'kscale' in params : kscale = params['kscale']
+    rscale = 'lin'
+    if 'rscale' in params : rscale = params['rscale']
+    KMIN, KMAX = 1e-4, 10
     lmax = params['lmax']
     parameter_ind = params['parameter_ind']  
+    probe = params['probe']
 
     (varied_params, varied_params_fid,
      cosmo_names, cosmo_min, cosmo_fid, cosmo_max, cosmo_fid_sigma) = parse_priors_and_ranges(params)
@@ -34,19 +43,21 @@ def run_mcmc(params, pool=None):
     print '-----------------------------------'
     print ' Run Error Analaysis'
     print '-----------------------------------'
+    print ' jobname :', params['name']
     print ' parameter setting'
+    print ' probe=', probe
     print ' b={} f={} s={} nn={}'.format(b,f,s,nn)
     print ' k = [{}, {}], kN={}'.format(kmin, kmax, kN)
     print ' r = [{}, {}], rN={}'.format(rmin, rmax, rN)
     print ' lmax={}'.format(lmax)
     print '-----------------------------------'
-    
-    lik_class = NoShell_covariance_MCMC(KMIN, KMAX, rmin, rmax, 2**12 + 1, rN, kN, b, f, s, nn, logscale = False )
+
+    lik_class = covariance_MCMC(KMIN, KMAX, rmin, rmax, 20000, kN, rN, b, f, s, nn, kscale = kscale, rscale=rscale )
 
     if 'matterpower' in params :
         file = params['matterpower']
     else : 
-        file = 'matterpower_z_0.55.dat'  # from camb (z=0.55)
+        file = 'src/matterpower_z_0.55.dat'  # from camb (z=0.55)
 
     lik_class.mPk_file = file
     print 'calling stored matter power spectrum.. ', file
@@ -72,12 +83,12 @@ def run_mcmc(params, pool=None):
                 params['fisher_filename'] = params['fishertot_filename']  
         else : 
 
-            P_multipole(lik_class)
+            P_multipole(params, lik_class)
             #lik_class.multipole_P_band_all()
             
         fisher_filename = params['fisher_filename']
     
-    elif 'generate_datav_only' in params : P_multipole(lik_class)
+    elif 'generate_datav_only' in params : P_multipole(params, lik_class)
 
     
     if 'mask_filename' not in params :   
@@ -92,7 +103,6 @@ def run_mcmc(params, pool=None):
             maskX = np.zeros(lik_class.rcenter.size * 3, dtype=bool)
 
         mask = np.hstack([maskP, maskX])
-
         #f = 'data_txt/datav/'+params['name']+'.mask'
         f = save_dir + 'mask.txt'
         np.savetxt(f,mask)
@@ -103,8 +113,8 @@ def run_mcmc(params, pool=None):
     
 
     if 'datav_filename' not in params :
-        datavP = P_multipole(lik_class)
-        datavXi = Xi_multipole(lik_class)
+        datavP = P_multipole(params, lik_class)
+        datavXi = Xi_multipole(params, lik_class)
         #datavP = np.genfromtxt(params['multipole_p_filename'])
         #datavXi = np.genfromtxt(params['multipole_xi_filename'])
         #datavP = masking_paramsdatav(lik_class, datavP, kmin = kmin, kmax=kmax, lmax=lmax)
@@ -138,38 +148,139 @@ def run_mcmc(params, pool=None):
         else : pass
     else : pass
 
-    print '-----------------------------------'
-    print ' MCMC Settings'
-    print '-----------------------------------'
-    
-    lik_class.init_like_class(datav_filename, fisher_filename, mask_filename)
-    
-    print " will sample over ", varied_params
-    print " fiducial values =", varied_params_fid
-    
-    nthreads = 32
-    if 'n_threads' in params:
-        nthreads = params['n_threads']
-    iterations = 10000
-    if 'iterations' in params:
-        iterations = params['iterations']
-    nwalker = 32
-    if 'nwalker' in params:
-        nwalker = params['nwalker']
 
-    chain_file = save_dir + 'chain_'+params['name']+'_sam{}'.format(iterations * nwalker)
+    lik_class.init_like_class(datav_filename, fisher_filename, mask_filename, probe=probe)
+    
 
-    print ' estimator :', params['probe'] 
-    print ' iterations {}'.format(iterations)
-    print ' nthreads   {}'.format(nthreads)
-    print ' nwalker    {}'.format(nwalker)
-    print ' chains will be stored in :', chain_file
-    print '-----------------------------------'
-    
-    
-    sample_main(lik_class, varied_params, iterations, nwalker, nthreads, chain_file,
-    cosmo_names, cosmo_min, cosmo_fid, cosmo_max, cosmo_fid_sigma, pool=pool)
+    if params['sampler'] == 'emcee':
+
+        print '-----------------------------------'
+        print ' MCMC Settings'
+        print '-----------------------------------'
+
+        print " sampler:", params['sampler']
+        print " will sample over ", varied_params
+        print " fiducial values =", varied_params_fid
+        
+        nthreads = 32
+        if 'n_threads' in params:
+            nthreads = params['n_threads']
+        iterations = 10000
+        if 'iterations' in params:
+            iterations = params['iterations']
+        nwalker = 32
+        if 'nwalker' in params:
+            nwalker = params['nwalker']
+
+        chain_file = save_dir + 'chain_'+params['name']+'_sam{}'.format(iterations * nwalker)
+
+        print ' estimator :', params['probe'] 
+        print ' iterations {}'.format(iterations)
+        print ' nthreads   {}'.format(nthreads)
+        print ' nwalker    {}'.format(nwalker)
+        print ' chains will be stored in :', chain_file
+        print '-----------------------------------'
+        
+        
+        sample_main(lik_class, varied_params, iterations, nwalker, nthreads, chain_file,
+        cosmo_names, cosmo_min, cosmo_fid, cosmo_max, cosmo_fid_sigma, pool=pool)
   
+
+    if params['sampler'] == 'snake':
+
+        print '-----------------------------------'
+        print ' MCMC Settings'
+        print '-----------------------------------'
+
+        print " sampler:", params['sampler']
+
+        nsample_dimension = 1000
+        if 'nsample_dimension' in params:
+            nsample_dimension = params['nsample_dimension']
+        threshold = 4
+        if 'threshold' in params:
+            threshold = params['threshold']
+        maxiter = 100000
+        if 'maxiter' in params:
+            maxiter = params['maxiter']
+        chain_file = save_dir + 'snake_'+params['name'] #+'_sam{}'.format(iterations * nwalker)
+
+        print ' estimator :', params['probe'] 
+        print ' nsample_dimension {}'.format(nsample_dimension)
+        print ' threshold   {}'.format(threshold)
+        print ' maxiter    {}'.format(maxiter)
+        print ' chains will be stored in :', chain_file
+        print '-----------------------------------'
+
+        snake_sampler_main(lik_class, varied_params, None, None, None, 
+                chain_file, cosmo_names, cosmo_min, cosmo_fid, cosmo_max, cosmo_fid_sigma, 
+                nsample_dimension, threshold, maxiter, pool=pool)
+
+
+
+    if params['sampler'] == 'grid':
+
+        print '-----------------------------------'
+        print ' MCMC Settings'
+        print '-----------------------------------'
+
+        print " sampler:", params['sampler']
+
+        nsample_dimension = 10
+        if 'nsample_dimension' in params:
+            nsample_dimension = params['nsample_dimension']
+        #nstep = -1
+        #if 'nstep' in params:
+        #    nstep = params['nstep']
+        #maxiter = 100000
+        #if 'maxiter' in params:
+        #    maxiter = params['maxiter']
+        chain_file = save_dir + 'grid_'+params['name']+'.txt' #+'_sam{}'.format(iterations * nwalker)
+
+        print ' estimator :', params['probe'] 
+        print ' nsample_dimension {}'.format(nsample_dimension)
+        #print ' nstep   {}'.format(nstep)
+        #print ' maxiter    {}'.format(maxiter)
+        print ' chains will be stored in :', chain_file
+        print '-----------------------------------'
+
+        grid_sampler_main(lik_class, varied_params, None, None, None, 
+                chain_file, cosmo_names, cosmo_min, cosmo_fid, cosmo_max, cosmo_fid_sigma, 
+                nsample_dimension, None, None, pool=pool)
+
+
+    if params['sampler'] == 'fmin':
+
+        print '-----------------------------------'
+        print ' MCMC Settings'
+        print '-----------------------------------'
+
+        print " sampler:", params['sampler']
+
+        #nsample_dimension = 10
+        #if 'nsample_dimension' in params:
+        #    nsample_dimension = params['nsample_dimension']
+        #nstep = -1
+        #if 'nstep' in params:
+        #    nstep = params['nstep']
+        #maxiter = 100000
+        #if 'maxiter' in params:
+        #    maxiter = params['maxiter']
+        save_dir = params['savedir'] + '/fmin/'
+        os.system('mkdir '+save_dir)
+        chain_file = save_dir + 'fmin_'+params['name']+'.txt' #+'_sam{}'.format(iterations * nwalker)
+
+        print ' estimator :', params['probe'] 
+        #print ' nsample_dimension {}'.format(nsample_dimension)
+        #print ' nstep   {}'.format(nstep)
+        #print ' maxiter    {}'.format(maxiter)
+        print ' chains will be stored in :', chain_file
+        print '-----------------------------------'
+
+        fmin_sampler_main(lik_class, varied_params, None, None, None, 
+                chain_file, cosmo_names, cosmo_min, cosmo_fid, cosmo_max, cosmo_fid_sigma, 
+                None, None, None, pool=pool)
+
 
     
 def parse_priors_and_ranges(params):
@@ -234,6 +345,36 @@ def parse_range(p_range):
     return min_val, fid_val, max_val, sig_val, is_var
 
 
+def mock_pararrel_processing( params, pool=None ):
+
+    n_mocks = params['n_mocks']
+    mock_dir = params['mock_dir']
+    #mock_probe = params['mock_probe']
+    if 'p' in params['probe'] : probe = 'p'
+    if 'xi' in params['probe'] : probe = 'xi'
+
+
+    paramslist = [ params.copy() for i in range( n_mocks )]
+    for i in range( 1, n_mocks+1 ):
+        
+        filename = mock_dir + 'mock_pxi_no{:04d}.txt'.format(i)
+        jobname = 'mock_'+probe+'_no{:04d}'.format(i)
+        #print 'calling mock datav :', filename
+        paramslist[i-1]['name'] = jobname
+        paramslist[i-1]['datav_filename'] = filename
+
+    jobs = paramslist
+
+    #Actually compute the likelihood results
+    if pool:
+        results = pool.map(run_mcmc, jobs )
+    else:
+        results = list(map(run_mcmc, jobs))
+
+    if results == None: return 0
+    else : pass
+
+
 if __name__=='__main__':
 
     parser = argparse.ArgumentParser(description='call run_error_analysis outside the pipeline')
@@ -245,5 +386,55 @@ if __name__=='__main__':
         sys.exit(1)
 
     params = yaml.load(open(param_file))
-    run_mcmc(params)
+
+    # Initialize the MPI pool
+    from schwimmbad import MPIPool
+    #from schwimmbad import MultiPool
+
+    if 'fitting_mocks' in params:
+        if params['fitting_mocks']:
+            pool = MPIPool()
+            #pool = None
+            mock_pararrel_processing(params, pool=pool)
+            pool.close()
+
+        else : 
+            pool = None
+            run_mcmc(params, pool=pool)
+            pool.close()
+
+
+        """
+        if 'fitting_mocks' in params:
+            if params['fitting_mocks']:
+
+                n_mocks = params['n_mocks']
+                mock_dir = params['mock_dir']
+                mock_probe = params['mock_probe']
+                #if 'p' in params['probe'] : probe = 'p'
+                #if 'xi' in params['probe'] : probe = 'xi'
+
+                for i in range( 1, n_mocks+1 ):
+                    
+                    filename = mock_dir + 'mock_pxi_no{:04d}.txt'.format(i)
+                    print 'calling mock datav :', filename
+                    params['datav_filename'] = filename
+                    params['name'] = 'mock_'+mock_probe+'_no{:04d}'.format(i)
+
+                    pool = MPIPool()
+                    #pool = None
+                    run_mcmc(params, pool=pool)
+                    pool.close()
+            else : 
+                pool = None
+                run_mcmc(params, pool=pool)
+                pool.close()
+        """
+
+    else : 
+        #from schwimmbad import MultiPool
+        #pool = MPIPool()
+        pool = None
+        run_mcmc(params, pool=pool)
+        pool.close()
 
