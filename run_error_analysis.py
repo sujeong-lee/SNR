@@ -23,11 +23,14 @@ def run_error_analysis(params):
     rmin, rmax, rN = params['r']
     #logscale = params['logscale']
     KMIN, KMAX = 1e-04, 10.
+    if 'KRANGE_Fourier' in params : 
+        KMIN, KMAX = params['KRANGE_Fourier']
+
     lmax = params['lmax']
     parameter_ind = params['parameter_ind']  
     kscale = 'log'
     if 'kscale' in params : kscale = params['kscale']
-    rscale = 'log'
+    rscale = 'lin'
     if 'rscale' in params : rscale = params['rscale']
     #parameter_ind_xi = params['parameter_ind_xi'] 
 
@@ -58,7 +61,15 @@ def run_error_analysis(params):
     #RSDPower = NoShell_covariance(KMIN, KMAX, rmin, rmax, 2**12 + 1, rN, kN, b,f,s,nn,logscale = logscale)
     RSDPower = class_discrete_covariance(KMIN=KMIN, KMAX=KMAX, RMIN=rmin, RMAX=rmax, n=20000, n_y = kN, n2=rN, b=b, f=f,
      s=s, nn=nn, kscale = kscale, rscale=rscale)
-    RSDPower.mPk_file = 'src/matterpower_z_0.55.dat'
+    
+    if 'matterpower' in params :
+        file = params['matterpower']
+    else : 
+        file = 'src/matterpower_z_0.55.dat'  # from camb (z=0.55)
+
+    #lik_class.mPk_file = file
+    RSDPower.mPk_file = file #'src/matterpower_z_0.55.dat'
+    print 'calling stored matter power spectrum.. ', file
 
     kcut_min = get_closest_index_in_data( kmin, RSDPower.kmin_y )   
     kcut_max = get_closest_index_in_data( kmax, RSDPower.kmax_y )
@@ -114,12 +125,13 @@ def run_error_analysis(params):
     else : print '\nUse Precalculated params_datavector ', params['params_datavector_filename']     
         
     
-    BandpowerFisher(params, RSDPower, kmin = kmin, kmax = kmax, lmax = lmax) 
-    Fisher_params(params, RSDPower, parameter = parameter_ind, kmin=kmin, kmax=kmax, lmax=lmax)
+    #BandpowerFisher(params, RSDPower, kmin = kmin, kmax = kmax, lmax = lmax) 
+    #Fisher_params(params, RSDPower, parameter = parameter_ind, kmin=kmin, kmax=kmax, lmax=lmax)
     
     direct_projection = 0
     if 'direct_projection' in params:
         direct_projection = params['direct_projection']
+
     if direct_projection :
         if 'params_xi_datavector_filename' not in params:
             params_xi_datavector(params, RSDPower)
@@ -127,7 +139,11 @@ def run_error_analysis(params):
             print '\nUse Precalculated params_si_datavector ', params['params_xi_datavector_filename'] 
         #DirectProjection_to_params(params, RSDPower, parameter =parameter_ind, kmin=kmin, kmax=kmax, lmax=lmax)
         DirectProjection_to_params_shotnoise(params, RSDPower, kmin = kmin, kmax = kmax, lmax =lmax, p_parameter = parameter_ind, xi_parameter =parameter_ind )
-        
+   
+    else : 
+        BandpowerFisher(params, RSDPower, kmin = kmin, kmax = kmax, lmax = lmax) 
+        Fisher_params(params, RSDPower, parameter = parameter_ind, kmin=kmin, kmax=kmax, lmax=lmax)
+
     SNR = params['SNR']
     if SNR : 
         print '\n\ncalculating SNR...'
@@ -1464,7 +1480,7 @@ def save_data_to_fits(params):
     """
 
 
-    if ['direct_projection']:
+    if params['direct_projection']:
         ResultDic['fisher_params_p_direct'] = params['fisher_params_p_direct']
         ResultDic['fisher_params_Xi_direct'] = params['fisher_params_Xi_direct']
         #ResultDic['fisher_params_tot'] = params['fisher_params_tot']
@@ -1486,26 +1502,26 @@ def save_data_to_fits(params):
             ResultDic['sigma_params_tot_direct'] = params['sigma_params_tot_direct'] 
 
 
+    else:
+        ResultDic['fisher_params_p'] = params['fisher_params_p']
+        ResultDic['fisher_params_Xi'] = params['fisher_params_Xi']
+        #ResultDic['fisher_params_tot'] = params['fisher_params_tot']
 
-    ResultDic['fisher_params_p'] = params['fisher_params_p']
-    ResultDic['fisher_params_Xi'] = params['fisher_params_Xi']
-    #ResultDic['fisher_params_tot'] = params['fisher_params_tot']
+        ResultDic['cov_params_p'] = params['cov_params_p']
+        ResultDic['cov_params_Xi'] = params['cov_params_Xi'] 
+        #ResultDic['cov_params_tot'] = params['cov_params_tot'] 
+        ResultDic['cov_params_diff'] = params['cov_params_diff'] 
 
-    ResultDic['cov_params_p'] = params['cov_params_p']
-    ResultDic['cov_params_Xi'] = params['cov_params_Xi'] 
-    #ResultDic['cov_params_tot'] = params['cov_params_tot'] 
-    ResultDic['cov_params_diff'] = params['cov_params_diff'] 
+        ResultDic['sigma_params_p'] = params['sigma_params_p'] 
+        ResultDic['sigma_params_Xi'] = params['sigma_params_Xi'] 
+        #ResultDic['sigma_params_tot'] = params['sigma_params_tot'] 
+        ResultDic['sigma_params_diff'] = params['sigma_params_diff'] 
+        
 
-    ResultDic['sigma_params_p'] = params['sigma_params_p'] 
-    ResultDic['sigma_params_Xi'] = params['sigma_params_Xi'] 
-    #ResultDic['sigma_params_tot'] = params['sigma_params_tot'] 
-    ResultDic['sigma_params_diff'] = params['sigma_params_diff'] 
-    
-
-    if 'com' in params['probe']:
-        ResultDic['fisher_params_tot'] = params['fisher_params_tot']
-        ResultDic['cov_params_tot'] = params['cov_params_tot'] 
-        ResultDic['sigma_params_tot'] = params['sigma_params_tot'] 
+        if 'com' in params['probe']:
+            ResultDic['fisher_params_tot'] = params['fisher_params_tot']
+            ResultDic['cov_params_tot'] = params['cov_params_tot'] 
+            ResultDic['sigma_params_tot'] = params['sigma_params_tot'] 
 
     fitsname = params['savedir']+'output_'+params['name']+'.fits'
     fitsio.write(fitsname, ResultDic, clobber=True)
