@@ -244,14 +244,14 @@ class class_covariance():
         """
         
         def compile():
-            print 'compiling fortran subroutines'
+            print ('compiling fortran subroutines')
             import numpy.f2py.f2py2e as f2py2e
             import sys
             sys.argv +=  "-c -m fortranfunction fortranfunction.f90".split()
             f2py2e.main()
             sys.argv = [sys.argv[0]]
     
-        def nocompile(): print 'skip fortran subroutine compiling'
+        def nocompile(): print ('skip fortran subroutine compiling')
         
         switch = {
             "y" : compile,
@@ -525,7 +525,7 @@ class class_covariance():
             for rj in range(rcenter.size):
                 cxill = Cll * Besselmatrix1[:,ri] * Besselmatrix2[:,rj] * kbin**2/(2*np.pi**2)
                 Cxill_matrix[ri,rj] = simpson( cxill, kbin )
-                print 'cov xi {}/{} \r'.format(i, rcenter.size**2),
+                print ('cov xi {}/{} \r'.format(i, rcenter.size**2)) ,
                 i+=1
         """
         i = 0
@@ -535,7 +535,7 @@ class class_covariance():
             #for rj in range(rcenter.size):
             cxill = Cll * Besselmatrix[:,ri][m1] * Besselmatrix * kbin[m1]**2/(2*np.pi**2)
             Cxill_matrix[:,i] = simpson( cxill, kbin, axis = 0 )
-            print '{}/{} \r'.format(i, rcenter.size),
+            print ('{}/{} \r'.format(i, rcenter.size)) ,
             i+=1
         """
         return Cxill_matrix         
