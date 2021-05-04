@@ -1,5 +1,6 @@
 import numpy as np
 import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import sys, os
 import scipy
@@ -13,18 +14,18 @@ from noshellavg_v2 import *
 
 def mock_covariance(p_mock, xi_mock):
 
-
     p_mean = np.mean( np.array(p_mock), axis = 0)
     xi_mean = np.mean( np.array(xi_mock), axis = 0)
 
     m1, m2 = np.mgrid[0:p_mean.size, 0:xi_mean.size]
     mock_covpxi = np.zeros(( p_mean.size, xi_mean.size ))
 
+    #sys.stdout.flush()
     for i in range(len(p_mock)) :
         p = np.array(p_mock[i])
         x = np.array(xi_mock[i])
         mock_covpxi += ( p[m1] - p_mean[m1]) * (x[m2] - xi_mean[m2])
-        print '{}/{}                \r'.format(i+1, len(p_mock)),
+        print 'calculate cov {}/{}         \r'.format(i+1, len(p_mock)),
 
     #mock_covpxi = 0.5 * (mock_covpxi + mock_covpxi.T)
     mock_covpxi = 1./( len(p_mock) - 1 ) * mock_covpxi
@@ -33,7 +34,7 @@ def mock_covariance(p_mock, xi_mock):
     return mock_covpxi
 
 
-def _fourier_tr_xi_mock(cosmo, l, kbin, p_mock):
+def fourier_tr_xi_mock(cosmo, l, kbin, p_mock):
     #p_mock_interp = scipy.interpolate.interp1d( kbin, p_mock )
     #kbin_fine = np.logspace(np.log10( kbin[0]), np.log10(kbin[-1]), num=20000 )
     #kbin_fine = kbin_fine[1:-1]
@@ -52,7 +53,7 @@ def _fourier_tr_xi_mock(cosmo, l, kbin, p_mock):
     return xi_mock
 
 
-def fourier_tr_xi_mock(cosmo, l, kbin, p_mock):
+def _fourier_tr_xi_mock(cosmo, l, kbin, p_mock):
     #p_mock_interp = scipy.interpolate.interp1d( kbin, p_mock )
     kbin_fine = np.logspace(np.log10( kbin[0]), np.log10(kbin[-1]), num=20000 )
     kbin_fine = kbin_fine[1:-1]
@@ -74,36 +75,46 @@ def generate_mocks( cosmo, l, kbin, p_model, covp_model, N_mock = 500 ):
     print 'generate mocks... size=', N_mock, '    '
     p_mock = np.array([np.random.normal(loc=p_model[i], scale=np.sqrt(covp_model.diagonal()[i]),
                                              size=N_mock) for i in range(kbin.size)]).T
-    xi_mock = fourier_tr_xi_mock(cosmo, l, kbin, p_mock)
-
-    # sort mocks so uncorrelated p and xi mocks in the same row
-    #xi_mock = np.vstack((xi_mock[1:,], xi_mock[0,:]))
+    xi_mock = _fourier_tr_xi_mock(cosmo, l, kbin, p_mock)
     return p_mock, xi_mock
 
 
-def _generate_mocks( cosmo, p_model, covp_model, N_mock = 500 ):
+def _generate_mocks( cosmo, l, kbin, p_model, covp_model, N_mock = 500 ):
     print 'generate mocks... size=', N_mock
     p_mock = np.array([np.random.normal(loc=p_model[i], scale=np.sqrt(covp_model.diagonal()[i]),
                                              size=N_mock) for i in range(cosmo.kbin.size)]).T
-    xi_mock = fourier_tr_xi_mock(cosmo, p_mock)
+    xi_mock = _fourier_tr_xi_mock(cosmo, l, kbin, p_mock)
 
     return p_mock, xi_mock
     
-def save_mocks( cosmo, p_mock, xi_mock, header = '', dir = '../data_txt/mocks/'  ):
+def save_mocks( cosmo, kbin, p_mock, rbin, xi_mock, header = '', dir = '../data_txt/mocks/'  ):
     if not os.path.exists(dir) : os.makedirs(dir) 
     DAT_p = np.column_stack(( p_mock ))
     DAT_xi= np.column_stack(( xi_mock))
     np.savetxt(dir + 'mocks_p.dat', DAT_p, header = header)
     np.savetxt(dir + 'mocks_xi.dat', DAT_xi,header = header)
-    np.savetxt(dir + 'r.dat', cosmo.rcenter,header = header)
-    np.savetxt(dir + 'k.dat', cosmo.kbin,header = header)
+    np.savetxt(dir + 'r.dat', rbin, header = header)
+    np.savetxt(dir + 'k.dat', kbin, header = header)
     
-def load_mocks( dir = '../data_txt/mocks/'  ):
+def load_mocks_pxi( dir = '../data_txt/mocks/'  ):
     mocks_p = np.loadtxt(dir + 'mocks_p.dat')
     mocks_xi= np.loadtxt(dir + 'mocks_xi.dat')
     rcenter = np.loadtxt(dir + 'r.dat')
     kcenter = np.loadtxt(dir + 'k.dat')
     return kcenter, mocks_p.T, rcenter.T, mocks_xi.T
+
+def load_mocks( dir = '../data_txt/mocks/', probe='p' ):
+
+    if probe == 'p':
+        filename = 'mocks_p.dat'
+        bin = 'k.dat'
+    elif probe == 'xi':
+        filename = 'mocks_xi.dat'
+        bin = 'r.dat'
+
+    mocks = np.loadtxt(dir + filename)
+    bincenter = np.loadtxt(dir + bin)
+    return bincenter, mocks.T
 
 def compute_data_vector(cosmo, l=0, b=2.0,f=0.74,s=3.5):
     cosmo.b = b
@@ -288,7 +299,60 @@ def getting_sigma_bs_diff_theory( cosmo, b = None, covp = None, covxi = None,
     print ' theory :', sigma_theory
     return sigma_theory
 
+
+
+def getting_sigma_bf_theory( cosmo, cov = None, datav = None, kmin=None, kmax = None):
     
+    
+    if kmin == None : 
+        idx_kmin = 0
+        idx_kmax = cosmo.kbin.size
+    else : 
+        idx_kmin = get_closest_index_in_data( kmin, cosmo.kbin )   
+        idx_kmax = get_closest_index_in_data( kmax, cosmo.kbin )
+        
+    
+    mask = np.zeros(cov.shape[0], dtype=bool)
+    mask[idx_kmin:idx_kmax+1] = 1
+        
+    Nk = np.sum(mask)
+    m1, m2 = np.mgrid[0:cov.shape[0],0:cov.shape[0]]
+    mask_2d = mask[m1] * mask[m2]
+    
+    N_l = datav.shape[0]
+    mask_datav = np.zeros((datav.shape), dtype=bool)
+    for i in range(N_l): 
+        mask_datav[i, idx_kmin:idx_kmax+1] = 1
+           
+    print ('Nk ', Nk, ' kmin', idx_kmin, ' kmax', idx_kmax)
+
+    #covinv = np.linalg.inv(cov[mask_2d].reshape(Nk,Nk))
+
+    covinv = np.zeros((Nk,Nk))
+    covinv_diagonal =  1./cov[mask_2d].reshape(Nk,Nk).diagonal() 
+    np.fill_diagonal(covinv, covinv_diagonal)
+
+    dqdb = datav[mask_datav]
+    dqdb = dqdb.reshape(N_l, dqdb.size/N_l)   
+
+
+    fig, ax = plt.subplots()
+    karray = cosmo.kcenter[mask]
+    ax.plot(karray, covinv_diagonal*1e+6, 'k-', label='cov')
+    for i in range(N_l):
+        ax.plot(karray, dqdb[i,:] )
+    ax.set_xscale('log')
+    #ax.set_yscale('log')
+    ax.legend()
+
+    #dqdb = dqdb[0,:].reshape(1, dqdb.size/N_l )
+    #print dqdb[0,:].shape
+    fisher_theory = np.dot( np.dot( dqdb, covinv ), dqdb.T)
+    sigma_theory = np.linalg.inv(fisher_theory) 
+
+    #print ' theory :', sigma_theory
+    return sigma_theory
+        
 
 def best_chisqr( covinv = None, datav=None, mockv = None, p=False):
     d_diff = (datav - mockv)
@@ -551,33 +615,106 @@ def cross_b(bestfit_b_p, bestfit_b_xi):
     N = len(bestfit_b_p)
     return np.sum((bestfit_b_p - b_true)*(bestfit_b_xi - b_true)) * 1./(N-1)
 
-def combine_sigmab(bestfit_b_p, bestfit_b_xi):
+
+def cross_params(bestfit_params_p, bestfit_params_xi):
+    """
+    cross covariance of bestfit b_p and bestfit b_xi
+    """
+    mean_params_p = np.mean( bestfit_params_p, axis = 0 )
+    mean_params_xi = np.mean( bestfit_params_xi, axis = 0 )
+
+    N_mocks, N_params = bestfit_params_p.shape
+    cross_cov = np.zeros(( N_params, N_params ))
+    M1, M2 = np.mgrid[0:N_params, 0:N_params]
+
+    factor = 1./( N_mocks - 1. )
+
+    for pi in range( N_mocks ):
+        for xi in range( N_mocks ):
+            cross_cov += (bestfit_params_p[pi,:][M1] - mean_params_p[M1]) *  (bestfit_params_xi[xi,:][M2] - mean_params_xi[M2] )
+
+    return factor * cross_cov 
+    #bestfit_b_p = np.array(bestfit_b_p)
+    #bestfit_b_xi = np.array(bestfit_b_xi)
+    #b_true = 2.0
+    #N = len(bestfit_b_p)
+    #return np.sum((bestfit_b_p - b_true)*(bestfit_b_xi - b_true)) * 1./(N-1)
+
+
+def stack3x3(a=None, b=None, c=None):
     
-    sigma_p = np.std(bestfit_b_p)
-    sigma_xi = np.std(bestfit_b_xi)
-    sigma_px = cross_b(bestfit_b_p, bestfit_b_xi)
+    A = np.hstack(a)
+    B = np.hstack(b)
+    C = np.hstack(c)
+    #print a[0].shape, A.shape
+    return np.vstack([A,B,C])
+
+def stack2x2(a=None, b=None):
+    A = np.hstack(a)
+    B = np.hstack(b)
+    return np.vstack([A,B])
+
+def combine_sigma(bestfit_params_p, bestfit_params_xi, re=True):
     
-    cov = np.zeros((2,2))
-    cov[0,0] = sigma_p**2
-    cov[1,1] = sigma_xi**2
+    if re:
+        print 'reordering mock xi '
+        bestfit_params_xi = np.vstack((bestfit_params_xi[1:,], bestfit_params_xi[0,:]))
+
+    covp_mock = mock_covariance(bestfit_params_p, bestfit_params_p)
+    #covpxi_bf_mock = mock_covariance(bestfit_params_p, bestfit_params_xi)
+    covxi_mock = mock_covariance(bestfit_params_xi, bestfit_params_xi)
+    bestfit_params = np.hstack([bestfit_params_p, bestfit_params_xi])
+    covtot_mock = mock_covariance(bestfit_params, bestfit_params)
+    #cross_cov = cross_params(bestfit_params_p, bestfit_params_xi)
+
     
-    F = inv(cov)
-    sig_diff = np.sqrt(1./np.sum(F))
-       
-    cov[0,1] = sigma_px
-    cov[1,0] = sigma_px
-   
-    F = inv(cov)
-    sig_com = np.sqrt(1./np.sum(F))
+    sigma_p = np.sqrt(covp_mock.diagonal())
+    sigma_xi = np.sqrt(covxi_mock.diagonal())
+
+
+    Fdiff = np.linalg.inv( covp_mock ) + np.linalg.inv( covxi_mock )
+    covdiff = np.linalg.inv(Fdiff)
+    sig_diff = np.sqrt(covdiff.diagonal())
+
+
+    #covtot_mock = stack2x2( a = [covp_bf_mock, cross_cov], b = [cross_cov.T, covxi_bf_mock] )
+    F_covtot_mock = np.linalg.inv(covtot_mock)
+
+    projection_vector_ = np.zeros(( sigma_p.size, sigma_p.size ))
+    np.fill_diagonal(projection_vector_, 1)
+    projection_vector = np.vstack(( projection_vector_, projection_vector_ ))
+
+    F_covtot_mock_projected = np.dot( np.dot( projection_vector.T, F_covtot_mock  ), projection_vector )
+    C_covtot_projected = np.linalg.inv(F_covtot_mock_projected)
+
+    sig_com = np.sqrt( C_covtot_projected.diagonal() )
+
+
+    #F_covtot_theory_projected = np.dot( np.dot( projection_vector.T, np.linalg.inv(covtot_bf_theory)  ), projection_vector )
+    #C_covtot_theory_projected = np.linalg.inv(F_covtot_theory_projected)
     
-    print 'cov matrix = \n |{:0.10f}   {:0.10f}| \n |{:0.10f}   {:0.10f}|'\
-    .format(cov[0,0], cov[0,1], cov[1,0], cov[1,1])
+    #print 'cov matrix = \n |{:0.10f}   {:0.10f}| \n |{:0.10f}   {:0.10f}|'\
+    #.format(cov[0,0], cov[0,1], cov[1,0], cov[1,1])
     
     print '\nsigma_p       :', sigma_p
     print 'sigma_xi      :', sigma_xi
     print 'sigma_combin  :', sig_com
     print 'sigma_diff    :', sig_diff
 
+    #print '\nsigma_com_theory:', sig_com_theory
+    dic = {}
+    dic['mean_p'] = np.mean(bestfit_params_p, axis=0)
+    dic['mean_Xi'] = np.mean(bestfit_params_xi, axis=0)
+    dic['mean_tot'] = np.mean( np.vstack([bestfit_params_p,bestfit_params_xi]),axis=0)	
+    dic['cov_params_p_direct'] = covp_mock
+    dic['cov_params_Xi_direct'] = covxi_mock
+    dic['cov_params_tot_direct'] = C_covtot_projected
+    dic['cov_params_diff_direct'] = covdiff
 
+    dic['sigma_params_p_direct'] = sigma_p
+    dic['sigma_params_Xi_direct'] = sigma_xi
+    dic['sigma_params_tot_direct'] = sig_com
+    dic['sigma_params_diff_direct'] = sig_diff
 
+    return dic #covp_mock, covxi_mock, C_covtot_projected, covdiff
 

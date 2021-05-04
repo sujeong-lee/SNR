@@ -9,6 +9,21 @@ import sys
 from scipy_integrate import *
 
 
+def smoothing_filter( ks, kmin, kmax, kl, kr ):
+    
+    filter = []
+    
+    for k in ks : 
+        if k < kl : 
+            value = (k - kmin )/(kl - kmin) - 1./(2*np.pi)*np.sin( 2*np.pi *(k-kmin)/(kl-kmin) )
+        elif k > kr : 
+            value = (kmax - k )/(kmax - kr) - 1./(2*np.pi)*np.sin( 2*np.pi *(kmax-k)/(kmax-kr) )
+        else : value = 1
+
+        filter.append(value)
+        
+    return np.array(filter)
+
 
 def get_closest_index_in_data( value, data ):
 
@@ -218,13 +233,14 @@ class class_discrete_covariance():
 
         
         
-        if kscale is 'lin':
+        if kscale == 'lin':
             self.kbin_y, self.dk_y = np.linspace(self.KMIN, self.KMAX, self.N_y+1, retstep = True)
             self.kmin_y = np.delete(self.kbin_y,-1)
             self.kmax_y = np.delete(self.kbin_y,0)
             self.kcenter_y = self.kmin_y + self.dk_y/2.
 
-        elif kscale is 'log' : 
+        elif kscale == 'log' : 
+            print 'kscale log'
             self.kbin_y = np.logspace(np.log10(self.KMIN),np.log10(self.KMAX), self.N_y+1, base=10)
             #self.kcenter_y = np.array([(np.sqrt(self.kbin_y[i] * self.kbin_y[i+1])) for i in range(len(self.kbin_y)-1)])
             self.kmin_y = np.delete(self.kbin_y,-1)
@@ -233,7 +249,7 @@ class class_discrete_covariance():
             self.kcenter_y = self.kmin_y + self.dk_y/2.
             self.dlnk_y = np.log(self.kbin_y[3]/self.kbin_y[2])
         
-        if rscale is 'lin':
+        if rscale == 'lin':
             # r bins setting
             self.rbin, dr = np.linspace(self.RMAX, self.RMIN, self.n2+1, retstep = True)
             self.dr = np.fabs(dr)
@@ -242,7 +258,7 @@ class class_discrete_covariance():
             self.rcenter = self.rmin + self.dr/2.
             #self.rcenter = (3 * (self.rmax**3 + self.rmax**2 * self.rmin + self.rmax*self.rmin**2 + self.rmin**3))/(4 *(self.rmax**2 + self.rmax * self.rmin + self.rmin**2))
             
-        elif rscale is 'log' :
+        elif rscale == 'log' :
             self.rbin = np.logspace(np.log(self.RMAX),np.log(self.RMIN),self.n2+1, base = np.e)
             rbin = self.rbin
             self.rmin = np.delete(rbin,0)
@@ -307,6 +323,62 @@ class class_discrete_covariance():
         #self.RealPowerBand_y = Pm(self.kcenter_y)
 
     
+
+    def multipole_P_interp(self,l):
+        """
+        Calculate power spectrum multipoles
+        
+        Parameters
+        ----------
+        l : mode (0, 2, 4)
+        
+        """
+        try: self.Pm_interp(1.0)
+        except : self.MatterPower()
+            
+        b = self.b
+        f = self.f
+        s = self.s
+        if self.nn == 0 : overnn = 0
+        else : overnn = 1./self.nn
+        
+        kbin = self.kbin
+        #kcenter= self.kcenter_y
+        mulist = self.mulist
+        dmu = self.dmu
+        PS = self.Pm_interp(kbin)
+        
+        matrix1, matrix2 = np.mgrid[0:mulist.size,0:kbin.size]
+        mumatrix = self.mulist[matrix1]
+        Le_matrix = Ll(l,mumatrix)
+        
+        kmatrix = kbin[matrix2]
+        Dmatrix = np.exp(- 1.*kmatrix**2 * mumatrix**2 * self.s**2) #FOG matrix
+        if self.s == 0: Dmatrix = 1.
+        R = (b + f * mumatrix**2)**2 * Dmatrix * Le_matrix
+        Pmultipole = (2 * l + 1.)/2. * PS * romberg( R, dx=dmu, axis=0 )
+        #if l==0 : Pmultipole+= overnn
+        
+
+        import scipy
+        #if l== 0 : Pmultipole_interp = log_interp(kbin, Pmultipole)
+        #else : 
+        Pmultipole_interp = scipy.interpolate.interp1d( kbin, Pmultipole )
+
+        #self.Pmlist = Pm(self.kcenter)
+        #self.RealPowerBand = Pm(self.kcenter)
+        if l ==0 : self.Pmultipole0_interp = Pmultipole_interp
+        elif l ==2 : self.Pmultipole2_interp = Pmultipole_interp
+        elif l ==4 : self.Pmultipole4_interp = Pmultipole_interp
+        else : raise ValueError('l should be 0, 2, 4')
+            
+        #if l != 0 : overnn = 0
+        #shellavg_pmultipole = self.shellavg_k(kbin, Pmultipole_interp(kbin))
+        #shellavg_pmultipole_SN = shellavg_pmultipole + overnn
+        #return Pmultipole_interp(kcenter)
+        #return Pmultipole_interp(kbin)
+        #return shellavg_pmultipole
+
 
     def multipole_P(self,l):
         """
@@ -1510,3 +1582,27 @@ class class_discrete_covariance():
         self.dxip0 = self.derivative_Xi(0)
         self.dxip2 = self.derivative_Xi(2)
         self.dxip4 = self.derivative_Xi(4)
+
+
+
+class covariance_MCMC(class_discrete_covariance):
+
+    def __init__(self, KMIN, KMAX, RMIN, RMAX, n, n_y, n2, b, f, s, nn, kscale = 'log', rscale='lin'):
+        class_discrete_covariance.__init__(self, KMIN, KMAX, RMIN, RMAX, n, n_y, n2, b, f, s, nn, kscale = kscale, rscale=rscale)
+        
+    def init_like_class(self, datav_filename, fisher_filename, mask_filename, probe=['p', 'xi']):
+        
+        print ' Read data...'
+        print ' probe  : ', probe
+        print ' datav  : ', datav_filename
+        print ' fisher : ', fisher_filename
+        print ' mask   : ', mask_filename
+        
+        self.probe = probe
+        self.datav_fid = np.genfromtxt(datav_filename)
+        self.fisher = np.genfromtxt(fisher_filename)
+        mask = np.genfromtxt(mask_filename)
+        self.mask = np.array(mask, dtype=bool)
+        
+        print ' N data point after masking:', np.sum(self.mask) #self.datav_fid[self.mask].size
+

@@ -127,10 +127,14 @@ def log_interp(x, y):
     return interpolator
 
 
+
+
+
 class class_covariance():
 
 
-    def __init__(self, KMIN=1e-04, KMAX=50, RMIN=0.1, RMAX=180, n=20000, n_y = 200, n2=200, b=2, f=0.74, s=3.5, nn=3.0e-04, kscale = 'log', rscale='lin'):
+    def __init__(self, cosmology = {'flat': True, 'H0': 67.85960, 'Om0': 3.057076e-01, 'Ob0': 4.845864e-02, 'sigma8': 0.8235, 'ns':9.683760e-01}, 
+    z=None, KMIN=1e-04, KMAX=50, RMIN=0.1, RMAX=180, n=20000, n_y = 200, n2=200, b=2, f=0.74, s=3.5, nn=3.0e-04, Vs= 5.0*10**9, kscale = 'log', rscale='lin', smooth_filter=False):
 
         """
         class_covariance : class
@@ -139,7 +143,7 @@ class class_covariance():
 
         Input params
         ------------
-        nn : shot noise
+        nn : space density ($\bar{n}$)
 
         b : galaxy bias
         f : growth rate dlnD/dlna
@@ -164,18 +168,22 @@ class class_covariance():
         mPk_file : matter power spectrum file
 
         """
+        self.BaseCosmology = cosmology
 
         # const
         self.h= 1.0
-        self.Vs= 5.0*10**9
+        self.Vs= Vs  #5.0*10**9
         self.nn= nn # for shot noise. fiducial : 3x1e-04
         
         self.b= b
         self.f= f 
         self.s= s
-        self.n3 = 2**8+1
+        self.n3 = 2**11+1
         self.mulist, self.dmu = np.linspace(-1.,1., self.n3, retstep = True)
         
+        #redshift point (effective redshift)
+        self.z = z
+
         # k scale range
         self.KMIN = KMIN
         self.KMAX = KMAX
@@ -189,13 +197,16 @@ class class_covariance():
         self.n2 = n2 #rN
         self.N_y = n_y #kN_y
     
-        self.mPk_file = 'matterpower_z_0.55.dat'
+        #self.mPk_file = 'matterpower_z_0.55.dat'
+        self.Pm_interp = None
         
         # k spacing for Fourier transform
-        self.kbin = np.logspace(np.log10(KMIN),np.log10(KMAX), self.n, base=10)
-        self.dlnk = np.log(self.kbin[3]/self.kbin[2])        
-        self.kcenter = np.array([(np.sqrt(self.kbin[i] * self.kbin[i+1])) for i in range(len(self.kbin)-1)])        
+        #self.kbin = np.logspace(np.log10(KMIN),np.log10(KMAX), self.n, base=10)
+        #self.dlnk = np.log(self.kbin[3]/self.kbin[2])        
+        #self.kcenter = np.array([(np.sqrt(self.kbin[i] * self.kbin[i+1])) for i in range(len(self.kbin)-1)])   
 
+        self.kbin, self.dk = np.linspace(self.KMIN, self.KMAX, self.n, retstep = True)
+        self.kcenter = self.kbin[:-1] + self.dk/2.
         
         
         if kscale is 'lin':
@@ -262,7 +273,7 @@ class class_covariance():
 
     
 
-    def MatterPower(self, file = None):
+    def MatterPower(self, file = None, z=None, kmin=None, kmax=None):
         """
         Load matter power spectrum values from input file and do log-interpolattion
         
@@ -271,23 +282,291 @@ class class_covariance():
         file: txt file that consists of 2 columns k and Pk
         
         """
+
+        """
         if file is None : file = self.mPk_file
         fo = open(file, 'r')
         position = fo.seek(0, 0)
         Pkl=np.array(np.loadtxt(fo))
         k=np.array(Pkl[:,0])
         P=np.array(Pkl[:,1])
+        """
 
+        print 'compute matter power spectrum using Colossus'
+        print 'Set cosmology to ', self.BaseCosmology
+
+        
+        from colossus.cosmology import cosmology as colossuscosmology
+        
+        if isinstance(self.BaseCosmology, str):
+            self.cosmology = colossuscosmology.setCosmology(self.BaseCosmology)
+        else: self.cosmology = colossuscosmology.setCosmology('myCosmo', self.BaseCosmology)
+
+        if z is not None: self.z = z
+        P = self.cosmology.matterPowerSpectrum(self.kbin, z=self.z)
+        #G = self.cosmology.growthFactor(self.z)
+        #P = self.cosmology.matterPowerSpectrum(self.kbin, 0.0) * G**2
+
+
+        #self.sigma8 = cosmo_planck.sigma(8,self.z, kmin=kmin, kmax = kmax)
+        #print 'sig8', self.sigma8
         #power spectrum interpolation
         #Pm = interp1d(k, P, kind= "linear")
-        Pm = log_interp(k, P)
+        Pm = log_interp(self.kbin, P)
         #self.Pmlist = Pm(self.kcenter)
         #self.RealPowerBand = Pm(self.kcenter)
         self.Pm_interp = Pm
         #self.RealPowerBand = Pm(self.kcenter)
         #self.RealPowerBand_y = Pm(self.kcenter_y)
+        
+    def compute_sigma8(self, z=None):
 
-    
+        #from colossus.cosmology import cosmology
+        #cosmo_planck = cosmology.setCosmology(self.BaseCosmology)
+        if z is not None: self.z = z
+        #P = cosmo_planck.matterPowerSpectrum(self.kcenter, z=self.z)
+        self.sigma8 = self.cosmology.sigma(8, self.z, kmin=self.KMIN, kmax=self.KMAX)
+        print 'sigma8(z={:0.2f})={:0.2f}'.format(self.z, self.sigma8)
+        return self.sigma8
+
+    def compute_fz(self, z=None):
+        from scipy.interpolate import interp1d
+        zarray = np.linspace(0.0, 2.0, 201)
+        growthFactor = self.cosmology.growthFactor(zarray)
+        growthRate = self.cosmology.growthFactor(zarray, derivative=1)*(-1.-zarray)/growthFactor
+        growthRate_interp = interp1d(zarray, growthRate)
+        if z is None: z=self.z
+        f = growthRate_interp(z)
+        return f
+
+    def Pkmu(self, k, mu):
+        """
+        Calculate power spectrum
+        
+        """
+        #try: self.Pm_interp(1.0)
+        #except : 
+        if self.Pm_interp is None: self.MatterPower()
+                
+        b = self.b
+        f = self.f
+        s = self.s
+        if self.nn == 0 : overnn = 0
+        else : overnn = 1./self.nn
+        
+        kbin = self.kbin
+        #kcenter= self.kcenter_y
+        mulist = self.mulist
+        dmu = self.dmu
+        PS = self.Pm_interp(kbin)
+        
+        matrix1, matrix2 = np.mgrid[0:mulist.size,0:kbin.size]
+        mumatrix = self.mulist[matrix1]
+        #Le_matrix = Ll(l,mumatrix)
+        
+        kmatrix = kbin[matrix2]
+        PSmatrix = PS[matrix2]
+        Dmatrix = np.exp(- 1.*kmatrix**2 * mumatrix**2 * self.s**2) #FOG matrix
+        if self.s == 0: Dmatrix = 1.
+        Pband = PSmatrix * (b + f * mumatrix**2)**2 * Dmatrix
+
+        from scipy.interpolate import interp2d 
+        self.Pband_interp = interp2d( kbin, mulist, Pband )
+        return self.Pband_interp(k, mu)[0]
+
+    def Pkmu_FisherComputationRSD(self, kmin=None, kmax=None, Nq=2):
+
+        b = self.b
+        f = self.f
+        kbin = self.kcenter
+        
+        matrix1, matrix2 = np.mgrid[0:self.mulist.size,0:kbin.size]
+        mumatrix = self.mulist[matrix1]
+        kmatrix = kbin[matrix2]
+        P = self.Pband_interp(kbin, self.mulist)
+
+        dlnP_db =  2./(b + f*mumatrix**2) 
+        dlnP_df =  2 * mumatrix**2 /(b+f*mumatrix**2)
+        dlnP_ds =  -1* kmatrix**2 * mumatrix**2 
+        dlnP_dq = [dlnP_db, dlnP_df, dlnP_ds]
+
+        Veff = self.Vs * (self.nn * P/( 1. + self.nn * P))**2
+        
+        matrix_muint = np.zeros((Nq, Nq, kbin.size))
+        prefactor = 2*np.pi*kmatrix**2/(2*np.pi)**3 
+        for i in range(Nq):
+            for j in range(Nq):
+                matrix_muint[i,j,:] =  0.5 * romberg(prefactor* dlnP_dq[i] * dlnP_dq[j] * Veff, dx=self.dmu, axis=0)
+
+        #matrix_muint[0,0,:] = 0.5 * romberg(2*np.pi*kmatrix**2/(2*np.pi)**3 * dlnP_db * dlnP_db * Veff, dx=self.dmu, axis=0)
+        #matrix_muint[0,1,:] = 0.5 * romberg(2*np.pi*kmatrix**2/(2*np.pi)**3 * dlnP_db * dlnP_df * Veff, dx=self.dmu, axis=0)
+        #matrix_muint[1,1,:] = 0.5 * romberg(2*np.pi*kmatrix**2/(2*np.pi)**3 * dlnP_df * dlnP_df * Veff, dx=self.dmu, axis=0)
+        #matrix_muint[1,0,:] = matrix_muint[0,1] 
+
+
+        # masking 
+        if kmin == None : 
+            idx_kmin = 0
+            idx_kmax = self.kbin.size
+        else : 
+            idx_kmin = get_closest_index_in_data( kmin, self.kbin )   
+            idx_kmax = get_closest_index_in_data( kmax, self.kbin )
+
+        mask = np.zeros(kbin.size, dtype=bool)
+        mask[idx_kmin:idx_kmax+1] = 1
+
+
+        Fisher = np.zeros((Nq,Nq))
+        for i in range(Nq):
+            for j in range(Nq):
+                Fisher[i,j] = simpson( matrix_muint[i,j,:][mask], kbin[mask] )
+        #Fisher[1,0] = Fisher[0,1]
+
+        Cov_bf = np.linalg.inv(Fisher)
+        return Cov_bf
+        # integration
+
+    def Pkmu_FisherComputationRSDBAO(self, kmin=None, kmax=None, Nq=5):
+
+        #RSD
+        b = self.b
+        f = self.f
+
+        #BAO
+        self.rs = 1.0 #self.cosmology.soundHorizon()
+        self.D_A_rs = self.cosmology.angularDiameterDistance(self.z) # /self.rs
+        self.H_z_rs = self.cosmology.Hz(self.z)# * self.rs
+
+        self.rs_fid = self.rs #1.0 #147.0 * 0.67
+        self.D_A_rs_fid = self.D_A_rs
+        self.H_z_rs_fid = self.H_z_rs
+
+
+        kbin = self.kcenter
+        
+        matrix1, matrix2 = np.mgrid[0:self.mulist.size,0:kbin.size]
+        mumatrix = self.mulist[matrix1]
+        kmatrix = kbin[matrix2]
+        P = self.Pband_interp(kbin, self.mulist)
+        #P_rescale = (self.D_A_rs/self.D_A_rs_fid)**2 *(self.H_z_rs_fid/self.H_z_rs) * P
+        P_rescale = P
+        dlnP_db =  2./(b + f*mumatrix**2) 
+        dlnP_df =  2 * mumatrix**2 /(b+f*mumatrix**2)
+        #dlnP_ds =  -1* kmatrix**2 * mumatrix**2 
+        
+        dlnP_dH = 1./self.H_z_rs # * np.ones(mumatrix.shape)
+        dlnP_dD = -2./self.D_A_rs # * np.ones(mumatrix.shape)
+        print dlnP_dH, dlnP_dD
+        #dlnP_dq = [dlnP_db, dlnP_df, dlnP_dH, dlnP_dD, dlnP_ds]
+        dlnP_dq = [dlnP_dH, dlnP_dD, dlnP_db, dlnP_df]
+
+        Veff = self.Vs * (self.nn * P_rescale/( 1. + self.nn * P_rescale))**2
+        
+        matrix_muint = np.zeros((Nq, Nq, kbin.size))
+        prefactor = 2*np.pi*kmatrix**2/(2*np.pi)**3 
+        for i in range(Nq):
+            for j in range(Nq):
+                matrix_muint[i,j,:] =  0.5 * romberg(prefactor* dlnP_dq[i] * dlnP_dq[j] * Veff, dx=self.dmu, axis=0)
+
+        #matrix_muint[0,0,:] = 0.5 * romberg(2*np.pi*kmatrix**2/(2*np.pi)**3 * dlnP_db * dlnP_db * Veff, dx=self.dmu, axis=0)
+        #matrix_muint[0,1,:] = 0.5 * romberg(2*np.pi*kmatrix**2/(2*np.pi)**3 * dlnP_db * dlnP_df * Veff, dx=self.dmu, axis=0)
+        #matrix_muint[1,1,:] = 0.5 * romberg(2*np.pi*kmatrix**2/(2*np.pi)**3 * dlnP_df * dlnP_df * Veff, dx=self.dmu, axis=0)
+        #matrix_muint[1,0,:] = matrix_muint[0,1] 
+
+        # masking 
+        if kmin == None : 
+            idx_kmin = 0
+            idx_kmax = self.kbin.size
+        else : 
+            idx_kmin = get_closest_index_in_data( kmin, self.kbin )   
+            idx_kmax = get_closest_index_in_data( kmax, self.kbin )
+
+        mask = np.zeros(kbin.size, dtype=bool)
+        mask[idx_kmin:idx_kmax+1] = 1
+
+
+        Fisher = np.zeros((Nq,Nq))
+        for i in range(Nq):
+            for j in range(Nq):
+                Fisher[i,j] = simpson( matrix_muint[i,j,:][mask], kbin[mask] )
+
+        print Fisher
+        #Fisher[1,0] = Fisher[0,1]
+        np.linalg.cholesky(Fisher)
+        Cov_params = np.linalg.inv(Fisher)
+        return Cov_params
+        # integration
+
+    def Pkmu_FisherComputationBAO(self, kmin=None, kmax=None, Nq=5):
+
+        #RSD
+        b = self.b
+        f = self.f
+
+        #BAO
+        self.rs = 1.0 #self.cosmology.soundHorizon()
+        self.D_A_rs = self.cosmology.angularDiameterDistance(self.z) # /self.rs
+        self.H_z_rs = self.cosmology.Hz(self.z)# * self.rs
+
+        self.rs_fid = self.rs #1.0 #147.0 * 0.67
+        self.D_A_rs_fid = self.D_A_rs
+        self.H_z_rs_fid = self.H_z_rs
+
+
+        kbin = self.kcenter
+        
+        matrix1, matrix2 = np.mgrid[0:self.mulist.size,0:kbin.size]
+        mumatrix = self.mulist[matrix1]
+        kmatrix = kbin[matrix2]
+        P = self.Pband_interp(kbin, self.mulist)
+        #P_rescale = (self.D_A_rs/self.D_A_rs_fid)**2 *(self.H_z_rs_fid/self.H_z_rs) * P
+        P_rescale = P
+        dlnP_db =  2./(b + f*mumatrix**2) 
+        dlnP_df =  2 * mumatrix**2 /(b+f*mumatrix**2)
+        #dlnP_ds =  -1* kmatrix**2 * mumatrix**2 
+        
+        dlnP_dH = 1./self.H_z_rs # * np.ones(mumatrix.shape)
+        dlnP_dD = -2./self.D_A_rs # * np.ones(mumatrix.shape)
+        print dlnP_dH, dlnP_dD
+        #dlnP_dq = [dlnP_db, dlnP_df, dlnP_dH, dlnP_dD, dlnP_ds]
+        dlnP_dq = [dlnP_dH, dlnP_dD, dlnP_db, dlnP_df]
+
+        Veff = self.Vs * (self.nn * P_rescale/( 1. + self.nn * P_rescale))**2
+        
+        matrix_muint = np.zeros((Nq, Nq, kbin.size))
+        prefactor = 2*np.pi*kmatrix**2/(2*np.pi)**3 
+        for i in range(Nq):
+            for j in range(Nq):
+                matrix_muint[i,j,:] =  0.5 * romberg(prefactor* dlnP_dq[i] * dlnP_dq[j] * Veff, dx=self.dmu, axis=0)
+
+        #matrix_muint[0,0,:] = 0.5 * romberg(2*np.pi*kmatrix**2/(2*np.pi)**3 * dlnP_db * dlnP_db * Veff, dx=self.dmu, axis=0)
+        #matrix_muint[0,1,:] = 0.5 * romberg(2*np.pi*kmatrix**2/(2*np.pi)**3 * dlnP_db * dlnP_df * Veff, dx=self.dmu, axis=0)
+        #matrix_muint[1,1,:] = 0.5 * romberg(2*np.pi*kmatrix**2/(2*np.pi)**3 * dlnP_df * dlnP_df * Veff, dx=self.dmu, axis=0)
+        #matrix_muint[1,0,:] = matrix_muint[0,1] 
+
+        # masking 
+        if kmin == None : 
+            idx_kmin = 0
+            idx_kmax = self.kbin.size
+        else : 
+            idx_kmin = get_closest_index_in_data( kmin, self.kbin )   
+            idx_kmax = get_closest_index_in_data( kmax, self.kbin )
+
+        mask = np.zeros(kbin.size, dtype=bool)
+        mask[idx_kmin:idx_kmax+1] = 1
+
+
+        Fisher = np.zeros((Nq,Nq))
+        for i in range(Nq):
+            for j in range(Nq):
+                Fisher[i,j] = simpson( matrix_muint[i,j,:][mask], kbin[mask] )
+
+        print Fisher
+        #Fisher[1,0] = Fisher[0,1]
+        np.linalg.cholesky(Fisher)
+        Cov_params = np.linalg.inv(Fisher)
+        return Cov_params
+        # integration
 
     def multipole_P(self,l):
         """
@@ -298,9 +577,10 @@ class class_covariance():
         l : mode (0, 2, 4)
         
         """
-        try: self.Pm_interp(1.0)
-        except : self.MatterPower()
-            
+        #try: self.Pm_interp(1.0)
+        #except : 
+        if self.Pm_interp is None: self.MatterPower()
+                
         b = self.b
         f = self.f
         s = self.s
@@ -436,8 +716,6 @@ class class_covariance():
         Vs = self.Vs
         nn = self.nn
 	
-	#Pinterp = interp1d(kbin, p)
-	#Pinterp = Pinterp(k_samp)
 
         matrix1,matrix2 = np.mgrid[0:len(kbin),0:len(rcenter)]
         kmatrix = kbin[matrix1]
@@ -537,7 +815,9 @@ class class_covariance():
             i+=1
         """
         return Cxill_matrix         
-            
+
+
+
     def covariance_PP(self, l1, l2):
 
         #from scipy.integrate import simps, romb
@@ -545,7 +825,7 @@ class class_covariance():
         import cmath
         I = cmath.sqrt(-1)
     
-        kbin = self.kbin
+        kbin = self.kcenter #self.kbin
         #kcenter = self.kcenter_y
         #skbin = self.skbin
         mulist = self.mulist
@@ -575,15 +855,17 @@ class class_covariance():
         
         
         Const_alpha = (2*l1 + 1.) * (2*l2 + 1.) * (2*pi)**3 /Vs
-        
+        #dV = (4*np.pi*kbin**3*self.dlnk)
+        dV = (4*np.pi*kbin**2*self.dk)
+
         kmatrix = kbin[matrix2]
         Pmmatrix = PS[matrix2]
         Dmatrix = np.exp(- kmatrix**2 * mumatrix**2 * self.s**2) #FOG matrix
         if self.s == 0 : Dmatrix = 1.
         R = (b + f * mumatrix**2)**2 * Dmatrix
         
-        Rintegral3 = Const_alpha * PS**2 * romberg( R**2 * Le_matrix1 * Le_matrix2, dx=dmu, axis=0 )/(4*np.pi*kbin**2)
-        Rintegral2 = Const_alpha * 2.*overnn * PS * romberg( R * Le_matrix1 * Le_matrix2, dx=dmu, axis=0 )/(4*np.pi*kbin**2)
+        Rintegral3 = Const_alpha * PS**2 * romberg( R**2 * Le_matrix1 * Le_matrix2, dx=dmu, axis=0 )/dV
+        Rintegral2 = Const_alpha * 2.*overnn * PS * romberg( R * Le_matrix1 * Le_matrix2, dx=dmu, axis=0 )/dV
      
 
         FirstSecond = Rintegral3 + Rintegral2
@@ -591,7 +873,7 @@ class class_covariance():
         
         # LastTerm
         if l1 == l2:
-            LastTerm = (2*l1 + 1.) * 2. * (2 * pi)**3/Vs*overnn**2 /(4*np.pi*kbin**2)
+            LastTerm = (2*l1 + 1.) * 2. * (2 * pi)**3/Vs*overnn**2 /dV
         else:
             LastTerm = np.zeros(FirstSecond.shape)
         
@@ -635,8 +917,8 @@ class class_covariance():
         covariance_mutipole_PP = np.zeros((kcenter.size,kcenter.size))
         np.fill_diagonal(covariance_mutipole_PP,covP_diag)
         """      
-        covP_diag = covP_interp(self.kbin)/(self.kbin * self.dlnk)
-        covariance_mutipole_PP = np.zeros((self.kbin.size,self.kbin.size))
+        covP_diag = covP_interp(kbin) #/(self.kbin * self.dlnk)
+        covariance_mutipole_PP = np.zeros((kbin.size,kbin.size))
         np.fill_diagonal(covariance_mutipole_PP,covP_diag)
         
         return covariance_mutipole_PP
@@ -932,7 +1214,7 @@ class class_covariance():
         if self.nn == 0 : overnn = 0
         else : overnn = 1./self.nn
 
-        kbin = self.kbin
+        kbin = self.kcenter
         rcenter = self.rcenter
 
         dr = self.dr
@@ -1008,7 +1290,7 @@ class class_covariance():
         f = self.f
         s = self.s
         
-        kbin = self.kbin
+        kbin = self.kcenter
         #kcenter = self.kcenter_y
         #skbin = self.skbin
         #skcenter = self.skcenter
@@ -1055,5 +1337,21 @@ class class_covariance():
     
 
         
+class BAORSD_covariance(class_covariance):
 
-        
+    """ 
+    Class for Redshift space distortions and BAO
+
+
+    Usage
+    -----
+    from error_analysis_class import RSD_covariance
+    L = BAORSD_covariance( PARAMETERS ... )
+
+
+    PARAMETER
+    ---------
+
+
+    """
+
