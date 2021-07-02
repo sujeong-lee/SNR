@@ -360,8 +360,8 @@ class class_covariance():
         b = self.b
         f = self.f
         s = self.s
-        if self.nn == 0 : overnn = 0
-        else : overnn = 1./self.nn
+        #if self.nn == 0 : overnn = 0
+        #else : overnn = 1./self.nn
         
         kbin = self.kbin
         #kcenter= self.kcenter_y
@@ -377,11 +377,33 @@ class class_covariance():
         PSmatrix = PS[matrix2]
         Dmatrix = np.exp(- 1.*kmatrix**2 * mumatrix**2 * self.s**2) #FOG matrix
         if self.s == 0: Dmatrix = 1.
-        Pband = PSmatrix * (b + f * mumatrix**2)**2 * Dmatrix
+        Pband = PSmatrix * (b + f * mumatrix**2)**2 * Dmatrix # + overnn
 
         from scipy.interpolate import interp2d 
         self.Pband_interp = interp2d( kbin, mulist, Pband )
-        return self.Pband_interp(k, mu)[0]
+        return self.Pband_interp(k, mu)#[0]
+
+    def dPkmu_dp(self, k, mu):
+
+        Pg = self.Pband_interp(k, mu)
+
+        matrix1, matrix2 = np.mgrid[0:mu.size,0:k.size]
+        mumatrix = mu[matrix1]
+        kmatrix = k[matrix2]
+        #P = self.Pband_interp(kbin, self.mulist)
+
+        dP_db =  2./(self.b + self.f*mumatrix**2) * Pg
+        dP_df =  2 * mumatrix**2 /(self.b+self.f*mumatrix**2) * Pg
+        dP_ds =  -1* kmatrix**2 * mumatrix**2 * Pg
+        dP_dq = [dP_db, dP_df, dP_ds]
+        return dP_dq
+
+    def dPl_dp(self, l, k, dP_dq):
+        dpldp = []
+        for i in range( len(dP_dq)):
+            re = self.multipole( l, k, dP_dq[i])
+            dpldp.append(re)
+        return dpldp #np.vstack((dpldp))
 
 
     def dPkmu_b_dlnx(self, k, mu):
@@ -736,6 +758,47 @@ class class_covariance():
         # integration
         return Fisher
 
+    def multipole(self, l, kr, vector):
+
+        matrix1, matrix2 = np.mgrid[0:self.mulist.size,0:kr.size]
+        mumatrix = self.mulist[matrix1]
+        Le_matrix = Ll(l,mumatrix)
+        #kmatrix = kr[matrix2]
+
+        Multipole = (2 * l + 1.)/2. * romberg( vector * Le_matrix, dx=self.dmu, axis=0 )
+        Multipole_interp = interp1d(kr, Multipole)
+        return Multipole_interp(kr)
+
+
+    def _multipole_P(self, l):
+        """
+        Calculate power spectrum multipoles
+        
+        Parameters
+        ----------
+        l : mode (0, 2, 4)
+        """
+        if self.Pband_interp is None: self.Pkmu(0.0, 0.0)
+
+        kbin = self.kbin
+        #kcenter= self.kcenter_y
+        mulist = self.mulist
+        dmu = self.dmu
+        #PS = self.Pm_interp(kbin)
+
+        matrix1, matrix2 = np.mgrid[0:mulist.size,0:kbin.size]
+        mumatrix = self.mulist[matrix1]
+        Le_matrix = Ll(l,mumatrix)
+        kmatrix = kbin[matrix2]
+
+        Pkmu = self.Pband_interp(kbin, mulist)
+
+        Pmultipole = (2 * l + 1.)/2. * romberg( Pkmu * Le_matrix, dx=dmu, axis=0 )
+        #if l==0 : Pmultipole+= overnn
+        #Pmultipole_interp = log_interp(kbin, Pmultipole)
+        Pmultipole_interp = interp1d(kbin, Pmultipole)
+        return Pmultipole_interp(kbin)
+        #return Pmultipole
 
 
     def multipole_P(self,l):
@@ -774,7 +837,8 @@ class class_covariance():
         Pmultipole = (2 * l + 1.)/2. * PS * romberg( R, dx=dmu, axis=0 )
         if l==0 : Pmultipole+= overnn
         
-        Pmultipole_interp = log_interp(kbin, Pmultipole)
+        #Pmultipole_interp = log_interp(kbin, Pmultipole)
+        Pmultipole_interp = interp1d(kbin, Pmultipole)
         #self.Pmlist = Pm(self.kcenter)
         #self.RealPowerBand = Pm(self.kcenter)
         if l ==0 : self.Pmultipole0_interp = Pmultipole_interp
@@ -791,6 +855,12 @@ class class_covariance():
     #    self.multipole_bandpower2 = self.multipole_P(2)
     #    self.multipole_bandpower4 = self.multipole_P(4)      
     
+    def _multipole_Xi(self, l):
+        p_l = self._multipole_P(l)
+        xi_l = self.fourier_transform_kr(0, self.kbin, p_l)
+        return xi_l
+
+
     def multipole_Xi(self,l):
         """
         Calculate xi multipoles up to quadrupole
@@ -851,8 +921,53 @@ class class_covariance():
 
         return multipole_xi
     
-    
     def fourier_transform_kr(self, l, kbin, p):
+        """
+        Calculate Fourier transform k -> r for a given l value
+        kbin and p should be very fine in log scale 
+        otherwise the result would be quite noisy.
+
+        Parameters
+        ----------
+        l : mode (0, 2, 4)
+        
+        """
+
+	
+        import cmath
+        I = cmath.sqrt(-1)
+            
+        #kbin = self.kbin
+        rcenter = self.rcenter
+
+        dr = self.dr
+        rmin = self.rmin
+        rmax = self.rmax
+        mulist = self.mulist	
+
+        matrix1,matrix2 = np.mgrid[0:len(kbin),0:len(rcenter)]
+        kmatrix = kbin[matrix1]
+        
+        rminmatrix = rmin[matrix2]
+        rmaxmatrix = rmax[matrix2]
+        rmatrix = rcenter[matrix2]
+        Vir = 4./3 * np.pi * np.fabs(rmax**3 - rmin**3)
+            
+        if len(p.shape) == 1: 
+            Pmatrix = p[matrix1]
+        else: Pmatrix = p
+
+        from fortranfunction import sbess
+        sbess = np.vectorize(sbess)
+        
+        #AvgBessel = np.array([ avgBessel(l, k ,rmin, rmax) for k in kbin ])#/Vir
+        AvgBessel = avgBessel(l, kmatrix, rminmatrix, rmaxmatrix )
+        #AvgBessel = sbess(l, kmatrix * rmatrix)
+        multipole_xi = np.real(I**l) * simpson(kmatrix**2 * Pmatrix * AvgBessel/(2*np.pi**2), kbin, axis=0)#/Vir
+
+        return multipole_xi
+
+    def _fourier_transform_kr(self, l, kbin, p):
         """
         Calculate Fourier transform k -> r for a given l value
         kbin and p should be very fine in log scale 
@@ -987,6 +1102,32 @@ class class_covariance():
         return Cxill_matrix         
 
 
+    def covariance_Pkmu(self):
+
+        Pg = self.Pband_interp(self.kbin,self.mulist)
+        dV = (2*np.pi*self.kbin**2*self.dk)
+        #dV = (2*np.pi*self.kbin**2*self.dk*self.dmu)
+        #dV = 2*np.pi*self.kbin**2
+        #FisherPkmu = self.Vs/(2*pi)**3 * dV * (self.nn /(self.nn * Pg + 1.) )**2
+        CovPkmu = (2*pi)**3/dV * 1./self.Vs * (Pg + 1./self.nn)**2
+        return CovPkmu
+        
+
+    def multipole_double(self, l1, l2, kr, vector):
+
+        mulist = self.mulist
+
+        matrix1, matrix2 = np.mgrid[0:mulist.size,0:kr.size]
+        mumatrix = self.mulist[matrix1]
+        
+        Le_matrix1 = Ll(l1,mumatrix)
+        Le_matrix2 = Ll(l2,mumatrix)
+
+        Const_alpha = (2*l1 + 1.) * (2*l2 + 1.) /2.
+        multipoledouble = Const_alpha * romberg( vector * Le_matrix1 * Le_matrix2, dx=self.dmu, axis=0 )
+        return multipoledouble
+
+
 
     def covariance_PP(self, l1, l2):
 
@@ -995,7 +1136,8 @@ class class_covariance():
         import cmath
         I = cmath.sqrt(-1)
     
-        kbin = self.kcenter #self.kbin
+        #kbin = self.kcenter 
+        kbin = self.kbin
         #kcenter = self.kcenter_y
         #skbin = self.skbin
         mulist = self.mulist
@@ -1054,28 +1196,28 @@ class class_covariance():
         
         if l1 == 0 : 
             if l2 == 0 : 
-                self.covP00_interp = log_interp(kbin, Total)
+                self.covP00_interp = interp1d(kbin, Total)
                 covP_interp = self.covP00_interp
                  
             elif l2 == 2 :
-                self.covP02_interp = log_interp(kbin, Total)
+                self.covP02_interp = interp1d(kbin, Total)
                 covP_interp = self.covP02_interp
             else : 
-                self.covP04_interp = log_interp(kbin, Total)
+                self.covP04_interp = interp1d(kbin, Total)
                 covP_interp = self.covP04_interp
                 
         elif l1 == 2 : 
             if l2 == 2 :
-                self.covP22_interp = log_interp(kbin, Total)
+                self.covP22_interp = interp1d(kbin, Total)
                 covP_interp = self.covP22_interp
             elif l2 == 4 :
-                self.covP24_interp = log_interp(kbin, Total)  
+                self.covP24_interp = interp1d(kbin, Total)  
                 covP_interp = self.covP24_interp
             else : raise ValueError
                 
         elif l1 == 4 : 
             if l2 == 4 :
-                self.covP44_interp = log_interp(kbin, Total)   
+                self.covP44_interp = interp1d(kbin, Total)   
                 covP_interp = self.covP44_interp
             else : raise ValueError
         
