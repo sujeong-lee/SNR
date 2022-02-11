@@ -186,6 +186,7 @@ class class_covariance():
         self.Sigma_silk = Sigma_silk#7.76
         self.Sigma0 = Sigma0 #12.4
 
+
         self.mulist, self.dmu = np.linspace(-1.,1., self.n3, retstep = True)
         
         #redshift point (effective redshift)
@@ -327,7 +328,64 @@ class class_covariance():
         self.Pm_interp = Pm
         #self.RealPowerBand = Pm(self.kcenter)
         #self.RealPowerBand_y = Pm(self.kcenter_y)
+
+    def Dewiggled_MatterPower(self, z=None):
+        """
+        Load matter power spectrum values from input file and do log-interpolattion
         
+        Parmaeter
+        ---------
+        file: txt file that consists of 2 columns k and Pk
+        
+        """
+
+        """
+        if file is None : file = self.mPk_file
+        fo = open(file, 'r')
+        position = fo.seek(0, 0)
+        Pkl=np.array(np.loadtxt(fo))
+        k=np.array(Pkl[:,0])
+        P=np.array(Pkl[:,1])
+        """
+
+        print 'compute matter power spectrum using Colossus'
+        print 'Set cosmology to ', self.BaseCosmology
+
+        
+        from colossus.cosmology import cosmology as colossuscosmology
+        
+        if isinstance(self.BaseCosmology, str):
+            self.cosmology = colossuscosmology.setCosmology(self.BaseCosmology)
+        else: self.cosmology = colossuscosmology.setCosmology('myCosmo', self.BaseCosmology)
+
+        if z is not None: self.z = z
+        P_lin = self.cosmology.matterPowerSpectrum(self.kbin, z=self.z, model='eisenstein98')
+        P_nw = self.cosmology.matterPowerSpectrum(self.kbin, z=self.z, model='eisenstein98_zb')
+
+        #P = (P_lin - P_nw)*np.exp(-0.5*self.kbin**2/kstar**2 ) + P_nw
+        #P = (P_lin - P_nw) + P_nw
+
+        self.sigma8 = self.compute_sigma8(z=0.0)
+        self.sigma8_z = self.compute_sigma8(z=self.z)
+        #G = self.cosmology.growthFactor(self.z)
+        #P = self.cosmology.matterPowerSpectrum(self.kbin, 0.0) * G**2
+
+
+        #self.sigma8 = cosmo_planck.sigma(8,self.z, kmin=kmin, kmax = kmax)
+        #print 'sig8', self.sigma8
+        #power spectrum interpolation
+        #Pm = interp1d(k, P, kind= "linear")
+        Pm = log_interp(self.kbin, P_lin)
+        Pmnw = log_interp(self.kbin, P_nw)
+        #self.Pmlist = Pm(self.kcenter)
+        #self.RealPowerBand = Pm(self.kcenter)
+        self.Pm_interp = Pm
+        self.Pmnw_interp = Pmnw
+        #self.RealPowerBand = Pm(self.kcenter)
+        #self.RealPowerBand_y = Pm(self.kcenter_y)
+        #return P_lin, P_nw
+
+
     def compute_sigma8(self, z=None, verbose=False):
 
         #from colossus.cosmology import cosmology
@@ -355,7 +413,9 @@ class class_covariance():
         """
         #try: self.Pm_interp(1.0)
         #except : 
-        if self.Pm_interp is None: self.MatterPower()
+        if self.Pm_interp is None: 
+            print ('Compute Matter Power first')
+            #self.Dewiggled_MatterPower(self, z=None, kstar = 0.12)
                 
         b = self.b
         f = self.f
@@ -367,14 +427,22 @@ class class_covariance():
         #kcenter= self.kcenter_y
         mulist = self.mulist
         dmu = self.dmu
-        PS = self.Pm_interp(kbin)
-        
+        Plin = self.Pm_interp(kbin)
+        Pnw = self.Pmnw_interp(kbin)
+        growth = self.cosmology.growthFactor(self.z)
+        kstarinv = 8.355 * (self.sigma8/0.8) * 0.5
+        self.kstar = 1./kstarinv
+
         matrix1, matrix2 = np.mgrid[0:mulist.size,0:kbin.size]
         mumatrix = self.mulist[matrix1]
         #Le_matrix = Ll(l,mumatrix)
         
         kmatrix = kbin[matrix2]
-        PSmatrix = PS[matrix2]
+        Plinmatrix = Plin[matrix2]
+        Pnwmatrix = Pnw[matrix2]
+        gmu = growth**2*(1-mumatrix**2 + mumatrix**2*(1+self.f)**2)
+        BAONLfactor = np.exp(- gmu * kmatrix**2/(2.*self.kstar**2))
+        PSmatrix = Pnwmatrix + (Plinmatrix-Pnwmatrix) *BAONLfactor
         Dmatrix = np.exp(- 1.*kmatrix**2 * mumatrix**2 * self.s**2) #FOG matrix
         if self.s == 0: Dmatrix = 1.
         Pband = PSmatrix * (b + f * mumatrix**2)**2 * Dmatrix
@@ -382,6 +450,7 @@ class class_covariance():
         from scipy.interpolate import interp2d 
         self.Pband_interp = interp2d( kbin, mulist, Pband )
         return self.Pband_interp(k, mu)[0]
+
 
 
     def dPkmu_b_dlnx(self, k, mu):
@@ -415,7 +484,6 @@ class class_covariance():
         sigma8 = self.compute_sigma8(z=self.z)
         Sigma_perp = 9.4 * (sigma8/0.9)
         Sigma_par = Sigma_perp * (1 + f)
-        print Sigma_perp, Sigma_par
 
         #x = np.sqrt( kperp**2*sperp**2 + kpar**2*spar**2 )
         dPb_1 = 0.5 * np.sqrt(8 * np.pi**2) * self.A0 * P02 *np.exp(-(kbin*self.Sigma_silk)**1.4)  
@@ -687,16 +755,17 @@ class class_covariance():
         if probe in ['full']:
             dlnP_dlnAs = 1.0
             dlnP_dns = np.log( kmatrix )
-            kpivot = 0.05
-            dlnP_dalpha = 0.5 * np.log(kmatrix/kpivot)**2
+            #kpivot = 0.05
+            #dlnP_dalpha = 0.5 * np.log(kmatrix/kpivot)**2
             dlnP_dPshot = 1.0
+            dlnP_dlnkstar = kmatrix**2
 
 
         if   probe=='both' : dlnP_dq = [dlnP_dlnD, dlnP_dlnH, dlnP_dlnbs8, dlnP_dlnfs8]
         elif probe=='rsd': dlnP_dq = [dlnP_dlnbs8, dlnP_dlnfs8, dlnP_ds]
         elif probe=='bao': dlnP_dq = [dlnP_dlnD, dlnP_dlnH]
         elif probe=='full': 
-            dlnP_dq = [dlnP_dlnD, dlnP_dlnH, dlnP_dlnbs8, dlnP_dlnfs8, dlnP_ds, dlnP_dns, dlnP_dalpha ]
+            dlnP_dq = [dlnP_dlnD, dlnP_dlnH, dlnP_dlnbs8, dlnP_dlnfs8, dlnP_ds, dlnP_dns, dlnP_dlnkstar ]
 
         Nq = len(dlnP_dq)
         #print ''
@@ -735,6 +804,203 @@ class class_covariance():
         #return Cov_params
         # integration
         return Fisher
+
+
+def Pkmu_multi_tracer_FisherComputation_BAORSD(cosmo_a, cosmo_b, kmin=None, kmax=None, 
+                                               Nq=4, probe='rsd', verbose=False, projection=True):
+    
+    kbin = cosmo_a.kcenter
+    matrix1, matrix2 = np.mgrid[0:cosmo_a.mulist.size,0:kbin.size]
+    mumatrix = cosmo_a.mulist[matrix1]
+    mumatrix2 = mumatrix**2
+    kmatrix = kbin[matrix2]
+    #Pg = self.Pband_interp(kbin, self.mulist)
+    
+    dlnk_dlnD = 1. - mumatrix2
+    dlnk_dlnH = -1*mumatrix2
+    dmu2_dlnD = -2*mumatrix2 * (1.-mumatrix2)
+    dmu2_dlnH = -2*mumatrix2 * (1.-mumatrix2)
+    dmu2 = np.gradient( mumatrix2, axis=0)
+    dlnk = np.gradient( np.log(kmatrix), axis=1)  
+    dlnP_ds =  -1* kmatrix**2 * mumatrix2
+    dlnP_dns = np.log( kmatrix )
+    #kpivot = 0.05
+    #dlnP_dalpha = 0.5 * np.log(kmatrix/kpivot)**2
+    dlnP_dlnkstar = kmatrix**2
+    
+    f = cosmo_a.f
+    fs8 = f*cosmo_a.sigma8_z
+    
+    # sample a
+    b_a = cosmo_a.b
+    bs8_a = b_a*cosmo_a.sigma8_z
+    lnbs8_a = np.log(bs8_a)
+    nn_a = cosmo_a.nn
+    P_a = nn_a*cosmo_a.Pband_interp(kbin, cosmo_a.mulist)
+    Pg_a = cosmo_a.Pband_interp(kbin, cosmo_a.mulist)
+    
+    dlnP_x_a, dlnP_y_a = np.gradient( np.log(Pg_a) )
+    dlnP_dmu2_a = dlnP_x_a/dmu2
+    dlnP_dlnk_a = dlnP_y_a/dlnk
+    nanmask = (cosmo_a.mulist == 0.0)
+    dlnP_dmu2_a[nanmask,:] = 0.0
+    
+    
+    dlnP_dlnH_a = (dlnP_dlnk_a * dlnk_dlnH + dlnP_dmu2_a * dmu2_dlnH)
+    dlnP_dlnD_a = (dlnP_dlnk_a * dlnk_dlnD + dlnP_dmu2_a * dmu2_dlnD)
+    dlnP_dlnbs8_a = 2*bs8_a /(bs8_a + fs8 * mumatrix**2) 
+    dlnP_dlnfs8_a = 2*mumatrix**2*fs8 /(bs8_a+fs8*mumatrix**2)
+    
+    # --------------------
+    # sample b
+    b_b = cosmo_b.b
+    bs8_b = b_b*cosmo_b.sigma8_z
+    lnbs8_b = np.log(bs8_b)
+    nn_b = cosmo_b.nn
+    P_b = nn_b* cosmo_b.Pband_interp(kbin, cosmo_b.mulist)
+    Pg_b = cosmo_b.Pband_interp(kbin, cosmo_b.mulist)
+
+    dlnP_x_b, dlnP_y_b = np.gradient( np.log(Pg_b) )
+    dlnP_dmu2_b = dlnP_x_b/dmu2
+    dlnP_dlnk_b = dlnP_y_b/dlnk
+    nanmask = (cosmo_a.mulist == 0.0)
+    dlnP_dmu2_b[nanmask,:] = 0.0
+    
+    dlnP_dlnH_b = (dlnP_dlnk_b * dlnk_dlnH + dlnP_dmu2_b * dmu2_dlnH)
+    dlnP_dlnD_b = (dlnP_dlnk_b * dlnk_dlnD + dlnP_dmu2_b * dmu2_dlnD)
+    dlnP_dlnbs8_b = 2*bs8_b /(bs8_b + fs8 * mumatrix**2) 
+    dlnP_dlnfs8_b = 2*mumatrix**2*fs8 /(bs8_b+fs8*mumatrix**2)
+    
+    
+    # shared parameters
+    lnfs8 = np.log(fs8)
+    lnHz = np.log(cosmo_a.Hz)
+    lnDA = np.log(cosmo_a.DA)
+    ns = cosmo_a.cosmology.ns
+    alpha = 0.0
+    lnkstar = np.log(cosmo_a.kstar)
+    
+    PP = [P_a, P_b]
+    P = P_a + P_b
+    Vs = cosmo_a.Vs
+
+
+    #dlnP_dq = [[dlnP_db_a, dlnP_df_a], [dlnP_db_b, dlnP_df_b]]
+    
+    if probe == 'rsd':
+        dlnP_dq = [[dlnP_dlnbs8_a, dlnP_dlnfs8_a], 
+                   [dlnP_dlnbs8_b, dlnP_dlnfs8_b]]
+        params = [lnbs8_a, lnfs8,lnbs8_b, lnfs8]
+    elif probe == 'bao':
+        dlnP_dq = [[dlnP_dlnD_a, dlnP_dlnH_a],
+                   [dlnP_dlnD_b, dlnP_dlnH_b]]
+        params = [lnDA, lnHz, lnDA, lnHz]
+    elif probe == 'both':
+        dlnP_dq = [[dlnP_dlnD_a, dlnP_dlnH_a, dlnP_dlnbs8_a, dlnP_dlnfs8_a], 
+                   [dlnP_dlnD_b, dlnP_dlnH_b, dlnP_dlnbs8_b, dlnP_dlnfs8_b]] 
+        params = [lnDA, lnHz, lnbs8_a, lnfs8, lnDA, lnHz, lnbs8_b, lnfs8] 
+    elif probe == 'full':
+        dlnP_dq = [[dlnP_dlnD_a, dlnP_dlnH_a, dlnP_dlnbs8_a, dlnP_dlnfs8_a, dlnP_ds, dlnP_dns, dlnP_dlnkstar ], 
+                   [dlnP_dlnD_b, dlnP_dlnH_b, dlnP_dlnbs8_b, dlnP_dlnfs8_b, dlnP_ds, dlnP_dns, dlnP_dlnkstar ]]
+        params = np.array( [lnDA, lnHz, lnbs8_a, lnfs8, cosmo_a.s, ns, lnkstar, 
+                            lnDA, lnHz, lnbs8_b, lnfs8, cosmo_b.s, ns, lnkstar] )
+    
+    Veff = Vs # * (self.nn * P/( 1 + self.nn * P))**2
+    
+    def delta(i,j):
+        if i==j: return 1.0
+        else: return 0.0
+        
+    matrix_muint = np.zeros((Nq, Nq, kbin.size))
+    prefactor = 2*np.pi*kmatrix**2/(2*np.pi)**3
+    
+    Np = len( dlnP_dq[0])
+    for i in range(2):
+        for j in range(2):
+            F_ij = 1./4 * ( delta(i,j)*PP[i]*P/(1.+P) + (PP[i]*PP[j]*(1.-P))/(1.+P)**2 )
+            for k in range(Np):
+                for l in range(Np):
+                    matrix_muint[Np*i+k,Np*j+l,:] = \
+                    1.0 * romberg( prefactor*dlnP_dq[i][k] * F_ij * dlnP_dq[j][l] * Veff, \
+                    dx=cosmo_a.dmu, axis=0)
+                    #print 2*k+i,2*l+j, F_ij
+                    
+
+    # masking 
+    if kmin == None : 
+        idx_kmin = 0
+        idx_kmax = cosmo_a.kbin.size
+    else : 
+        idx_kmin = get_closest_index_in_data( kmin, cosmo_a.kbin )   
+        idx_kmax = get_closest_index_in_data( kmax, cosmo_a.kbin )
+
+    mask = np.zeros(kbin.size, dtype=bool)
+    mask[idx_kmin:idx_kmax+1] = 1
+
+    Fisher = np.zeros((Nq,Nq))
+    for i in range(Nq):
+        for j in range(Nq):
+            Fisher[i,j] = simpson( matrix_muint[i,j,:][mask], kbin[mask] )
+       
+    if projection == False: 
+        return params, Fisher
+    #Cov = np.linalg.inv( Fisher )
+    #Err = np.sqrt(Cov.diagonal() )
+    # ----------------------
+    
+    if projection:
+        
+
+        # projection to three params
+        if probe == 'rsd':
+            Projection = np.array([[1,0,0,0],[0,0,1,0],[0,1,0,1]])
+            params = np.array( [lnbs8_a, lnbs8_b, lnfs8] )
+            if nn_a == 0: mask = np.array([0,1,1], dtype=bool)
+            elif nn_b == 0: mask = np.array([1,0,1], dtype=bool)
+            else : mask = np.ones(params.size, dtype=bool)
+
+        if probe == 'bao':
+            Projection = np.array([[1,0,1,0],[0,1,0,1]])
+            params = np.array( [lnDA, lnHz ])
+            mask = np.ones(params.size, dtype=bool)
+
+        elif probe == 'both':
+            Projection = np.array([[1,0,0,0,1,0,0,0],  # D projection
+                                   [0,1,0,0,0,1,0,0],  # H projection
+                                   [0,0,0,1,0,0,0,1],  # f projection
+                                   [0,0,1,0,0,0,0,0],  # b_a projection
+                                   [0,0,0,0,0,0,1,0]]) # b_b projection
+            params = np.array( [lnDA, lnHz, lnfs8, lnbs8_a, lnbs8_b] )
+            if nn_a == 0: mask = np.array([1,1,1,0,1], dtype=bool)
+            elif nn_b == 0: mask = np.array([1,1,1,1,0], dtype=bool)
+            else : mask = np.ones(params.size, dtype=bool)
+
+        elif probe == 'full':
+            Projection = np.array([[1,0,0,0,0,0,0, 1,0,0,0,0,0,0],  # D projection
+                                   [0,1,0,0,0,0,0, 0,1,0,0,0,0,0],  # H projection
+                                   [0,0,0,1,0,0,0, 0,0,0,1,0,0,0],  # f projection
+                                   [0,0,1,0,0,0,0, 0,0,0,0,0,0,0],  # b_a projection
+                                   [0,0,0,0,0,0,0, 0,0,1,0,0,0,0],  # b_b projection
+                                   [0,0,0,0,1,0,0, 0,0,0,0,1,0,0],  # sigma_v projection
+                                   [0,0,0,0,0,1,0, 0,0,0,0,0,1,0],  # ns
+                                   [0,0,0,0,0,0,1, 0,0,0,0,0,0,1]]) # alpha
+            params = np.array( [lnDA, lnHz, lnfs8, lnbs8_a, lnbs8_b, cosmo_a.s, ns, alpha] )
+            if   nn_a == 0: mask = np.array([1,1,1,0,1,1,1,1], dtype=bool)
+            elif nn_b == 0: mask = np.array([1,1,1,1,0,1,1,1], dtype=bool)
+            else : mask = np.ones(params.size, dtype=bool)
+
+
+        Fisher_projected = np.dot(np.dot(Projection, Fisher ), Projection.T)        
+
+        Covcut = np.linalg.inv( Fisher_projected[mask,:][:,mask] )   
+        Cov = np.full(( len(params),len(params)), np.nan)
+
+        mask2d = np.outer(mask, mask)
+        Cov[mask2d] = Covcut.ravel()
+        Err = np.sqrt(Cov.diagonal())   
+
+    return params, Err, Cov 
+    
 
 
 
